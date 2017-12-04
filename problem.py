@@ -3,6 +3,12 @@
 # Constants, dimensions, etc. for the solver
 # Expect this file to change greatly over the course of its development
 
+import node
+import mesh
+import quadrature
+
+FIXED_SOURCE = 1.0  # TODO: scale by 1, 2, 4pi?
+
 RHO_FUEL = 10.4     # g/cm^3
 RHO_MOD = 0.7       # g/cm^3
 
@@ -12,7 +18,95 @@ SIGMA_S_O16 = 3.888     # b
 SIGMA_S_H1 = 20.47      # b
 SIGMA_A_H1 = 1.0        # b
 # --> fuel is pure scattering; only absorption is hydrogen
+# TODO: Macro cross sections. The numbers below are bogus
+f = lambda x: x
+FUEL_MACRO_S = f(SIGMA_S_U238)
+MOD_MACRO_S = f(SIGMA_S_O16)
+MOD_MACRO_A = f(SIGMA_A_H1)
+FUEL_CROSS_SECTIONS = {"scatter": FUEL_MACRO_S}
+MOD_CROSS_SECTIONS = {"scatter": MOD_MACRO_S, "absorption": MOD_MACRO_A}
 
 # Cell dimensions
 PITCH = 1.25            # cm; pin pitch
 WIDTH = 0.80            # cm; length of one side of the square fuel pin
+
+
+class Pincell1D(mesh.Mesh1D):
+	"""Mesh for a one-dimensional pincell with 3 regions:
+	mod, fuel, and mod
+	
+	Parameters:
+	-----------
+	
+	nx_mod:         int; number of mesh divisions in each moderator region
+	nx_fuel:        int; number of mesh divisions in the one fuel region
+	
+	Attributes:
+	-----------
+	
+	"""
+	def __init__(self, quad, nx_mod, nx_fuel):
+		nx = 2*nx_mod + nx_fuel
+		super().__init__(quad, PITCH, nx)
+		self.nx_mod = nx_mod
+		self.nx_fuel = nx_fuel
+		self.fuel_xwidth = WIDTH
+		self.mod_xwidth = (PITCH - WIDTH)/2.0
+		# Ranges
+		self.mod0_lim0 = 0
+		self.mod0_lim1 = self.nx_mod - 1
+		self.fuel_lim0 = self.nx_mod
+		self.fuel_lim1 = self.nx_mod + self.nx_fuel - 1
+		self.mod1_lim0 = self.nx_mod + self.nx_fuel
+		self.mod1_lim1 = self.nx - 1
+		# Remove the next two lines for non-uniform meshes in each region
+		self._dx_fuel = self.fuel_xwidth/self.nx_fuel
+		self._dx_mod = self.mod_xwidth/self.nx_mod
+		self._dxs = (self._dx_mod, self._dx_fuel, self._dx_mod)
+		#
+		self._populate()
+		
+	
+	def __str__(self):
+		rep = """\
+1-D Pincell Mesh
+----------------
+Indices:
+	[{self.mod0_lim0}, {self.mod0_lim1}]: Moderator
+	[{self.fuel_lim0}, {self.fuel_lim1}]: Fuel
+	[{self.mod1_lim0}, {self.mod1_lim1}]: Moderator
+""".format(**locals())
+		return rep
+	
+	def get_region(self, i):
+		if i <= self.mod0_lim1:
+			return 0
+		elif i <= self.fuel_lim1:
+			return 1
+		elif i <= self.mod1_lim1:
+			return 2
+		else:
+			errstr = "Invalid index {} for mesh of size {}.".format(i, self.nx)
+			raise IndexError(errstr)
+	
+	def get_dx(self, i):
+		j = self.get_region(i)
+		return self._dxs[j]
+	
+	def _populate(self):
+		for i in range(self.nx):
+			region = self.get_region(i)
+			dx = self.get_dx(i)
+			if region == 1:
+				fuel_node = node.Node1D(dx, self.quad, FUEL_CROSS_SECTIONS, FIXED_SOURCE)
+				self.nodes[i] = fuel_node
+			else:
+				mod_node = node.Node1D(dx, self.quad, MOD_CROSS_SECTIONS)
+				self.nodes[i] = mod_node
+			
+
+
+# test
+s4 = quadrature.GaussLegendreQuadrature(4)
+cell = Pincell1D(s4, nx_mod=5, nx_fuel=8)
+print(cell)
