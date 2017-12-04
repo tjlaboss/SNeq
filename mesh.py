@@ -22,16 +22,16 @@ class Mesh(object):
 	
 	"""
 	def __init__(self, num, quad, wxyz, nxyz):
-		assert len(wxyz) == self.num, \
+		assert len(wxyz) == num, \
 			"Wrong number of entries for wxyz in {} dimensions".format(num)
-		assert len(nxyz) == self.num, \
+		assert len(nxyz) == num, \
 			"Wrong number of entries for nxyz in {} dimensions".format(num)
 		self.num = num
 		self.quad = quad
 		#self.wxyz = wxyz
 		#self.nxyz = nxyz
 	
-	def populate(self):
+	def _populate(self):
 		"""Populate the mesh with appropriate nodes"""
 		pass
 
@@ -41,7 +41,7 @@ class Mesh1D(Mesh):
 	
 	Parameters:
 	-----------
-	quad:           Quadrature; num-D angular quadrature to use
+	quad:           Quadrature; 1-D angular quadrature to use
 	
 
 	Attributes:
@@ -54,7 +54,7 @@ class Mesh1D(Mesh):
 		self.xwidth = xwidth
 		self.nodes = np.empty(nx, dtype=node.Node1D)
 		self.flux = np.zeros(nx)
-		self.psi = np.zeros(nx, quad.N)
+		self.psi = np.zeros((nx, quad.N))
 		
 	def get_dx(self, i):
 		"""Return the mesh spacing for the ith node.

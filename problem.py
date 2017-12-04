@@ -6,6 +6,7 @@
 import node
 import mesh
 import quadrature
+import material
 
 FIXED_SOURCE = 1.0  # TODO: scale by 1, 2, 4pi?
 
@@ -18,13 +19,16 @@ SIGMA_S_O16 = 3.888     # b
 SIGMA_S_H1 = 20.47      # b
 SIGMA_A_H1 = 1.0        # b
 # --> fuel is pure scattering; only absorption is hydrogen
-# TODO: Macro cross sections. The numbers below are bogus
-f = lambda x: x
-FUEL_MACRO_S = f(SIGMA_S_U238)
-MOD_MACRO_S = f(SIGMA_S_O16)
-MOD_MACRO_A = f(SIGMA_A_H1)
-FUEL_CROSS_SECTIONS = {"scatter": FUEL_MACRO_S}
-MOD_CROSS_SECTIONS = {"scatter": MOD_MACRO_S, "absorption": MOD_MACRO_A}
+
+# Define the nuclides
+u238 = material.Nuclide(238, {"scatter": SIGMA_S_U238})
+o16 = material.Nuclide(16, {"scatter": SIGMA_S_O16})
+h1 = material.Nuclide(1, {"scatter": SIGMA_S_H1,
+                          "absorption": SIGMA_A_H1})
+# Define the constituent materials
+fuel_mat = material.Material([u238], RHO_FUEL, name="Fuel")
+mod_mat = material.Material([o16, h1, h1], RHO_MOD, name="Moderator")
+
 
 # Cell dimensions
 PITCH = 1.25            # cm; pin pitch
@@ -45,9 +49,11 @@ class Pincell1D(mesh.Mesh1D):
 	-----------
 	
 	"""
-	def __init__(self, quad, nx_mod, nx_fuel):
+	def __init__(self, quad, mod, fuel, nx_mod, nx_fuel):
 		nx = 2*nx_mod + nx_fuel
 		super().__init__(quad, PITCH, nx)
+		self.fuel = fuel
+		self.mod = mod
 		self.nx_mod = nx_mod
 		self.nx_fuel = nx_fuel
 		self.fuel_xwidth = WIDTH
@@ -98,15 +104,15 @@ Indices:
 			region = self.get_region(i)
 			dx = self.get_dx(i)
 			if region == 1:
-				fuel_node = node.Node1D(dx, self.quad, FUEL_CROSS_SECTIONS, FIXED_SOURCE)
+				fuel_node = node.Node1D(dx, self.quad, self.fuel.macro_xs, FIXED_SOURCE)
 				self.nodes[i] = fuel_node
 			else:
-				mod_node = node.Node1D(dx, self.quad, MOD_CROSS_SECTIONS)
+				mod_node = node.Node1D(dx, self.quad, self.mod.macro_xs)
 				self.nodes[i] = mod_node
 			
 
 
 # test
 s4 = quadrature.GaussLegendreQuadrature(4)
-cell = Pincell1D(s4, nx_mod=5, nx_fuel=8)
+cell = Pincell1D(s4, mod_mat, fuel_mat, nx_mod=5, nx_fuel=8)
 print(cell)

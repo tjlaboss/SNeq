@@ -3,7 +3,7 @@
 # Multi-group material classes
 
 import constants
-
+import numpy as np
 
 class Nuclide(object):
 	"""
@@ -19,12 +19,15 @@ class Nuclide(object):
 	def __init__(self, a, xs_dict, g=1):
 		self.a = a
 		self.g = g
+		self.xs_dict ={}
 		for reaction, mgxs in xs_dict.items():
 			assert reaction in constants.REACTIONS, \
 				"Unknown reaction type: {}".format(reaction)
+			if type(mgxs) in (int, float) and g == 1:
+				mgxs = [mgxs]
 			assert len(mgxs) == g,\
 				"Wrong number of energy groups for {} xs".format(reaction)
-		self.xs_dict = xs_dict
+			self.xs_dict[reaction] = np.array(mgxs)
 		
 		
 class Material(object):
@@ -50,7 +53,7 @@ class Material(object):
 		self.g = nuclides[0].g
 		self._micro_xs = {}
 		
-		mgxs_temp = [0.0]*self.g
+		mgxs_temp = np.zeros(self.g)
 		for reaction in constants.REACTIONS:
 			self._micro_xs[reaction] = mgxs_temp[:]
 		molar_mass = 0.0
