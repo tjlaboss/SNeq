@@ -66,7 +66,7 @@ class DiamondDifferenceCalculator1D(object):
 		--------
 		float; the L2 engineering norm after this sweep
 		"""
-		old_flux = self.mesh.flux[:, :]
+		old_flux = np.array(self.mesh.flux[:, :])
 		N2 = self.quad.N//2
 		
 		# TODO: Make the multiple energy groups do anything
@@ -115,11 +115,14 @@ class DiamondDifferenceCalculator1D(object):
 		diff = 0.0
 		for g in range(self.mesh.groups):
 			for i in range(self.mesh.nx):
-				diff += (self.mesh.flux[i, g] - old_flux[i, g])**2
+				phi_i1 = self.mesh.flux[i, g]
+				phi_i0 = old_flux[i, g]
+				if phi_i1 != phi_i0:
+					diff += ((phi_i1 - phi_i0)/phi_i1)**2
 		
 		return np.sqrt(diff/self.mesh.nx)
 			
-	def solve(self, eps, maxiter=100):
+	def solve(self, eps, maxiter=1000):
 		"""Solve on the mesh within tolerance
 		
 		Parameters:
@@ -134,9 +137,9 @@ class DiamondDifferenceCalculator1D(object):
 		"""
 		diff = eps + 1
 		count = 0
-		#while diff > eps:
-		for j in range(maxiter - 1):
+		while diff > eps:
 			diff = self.transport_sweep()
+			#print(count, ":\t", diff)
 			
 			count += 1
 			if count >= maxiter:
