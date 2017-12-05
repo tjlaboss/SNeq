@@ -8,6 +8,7 @@ import mesh
 import quadrature
 import material
 import calculator
+import plot1d
 
 FIXED_SOURCE = 1.0  # TODO: scale by 1, 2, 4pi?
 
@@ -127,4 +128,7 @@ solver.solve(eps=1E-10)
 phi = solver.mesh.flux
 phi /= phi.sum()
 print(phi)
-print()
+print(mod_mat.macro_xs)
+print(fuel_mat.macro_xs)
+if True:
+	plot1d.plot_1group_flux(cell)

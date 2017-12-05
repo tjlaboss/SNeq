@@ -8,6 +8,7 @@ import mesh
 import quadrature
 import material
 import calculator
+import plot1d
 from numpy import array
 
 FIXED_SOURCE = 1.0  # TODO: scale by 1, 2, 4pi?
@@ -24,8 +25,8 @@ fuel_mat = material.Material([u238], density=1.0, name="Fuel")
 fuel_mat.macro_xs = {'scatter': array([10.0])}
 
 mod_mat = material.Material([h1], density=1.0, name="Moderator")
-mod_mat.macro_xs = {'absorption': array([1.0]),
-                     'scatter': array([1.0])}
+mod_mat.macro_xs = {'absorption': array([0.1]),
+                     'scatter': array([10.0])}
 
 # Cell dimensions
 PITCH = 0.6  # cm; pin pitch
@@ -122,22 +123,10 @@ NXFUEL = 8
 cell = Pincell1D(s2, mod_mat, fuel_mat, nx_mod=NXMOD, nx_fuel=NXFUEL)
 solver = calculator.DiamondDifferenceCalculator1D(s2, cell, ("reflective", "reflective"))
 solver.transport_sweep()
-solver.solve(eps=1E-10)
+solver.solve(eps=1E-5)
 phi = solver.mesh.flux
 phi /= phi.max()
 print(cell)
 print(phi)
 if True:
-	from pylab import *
-	xvals = range(0, cell.nx)
-	plot(xvals, phi, "b-o")
-	m = 1.1 #phi.max()
-	plot([NXMOD, NXMOD], [0, m], "gray")
-	plot([cell.nx-NXMOD-1, cell.nx-NXMOD-1], [0, m], "gray")
-	xlabel("Node number", fontsize=14)
-	ylabel("$\overline{\phi(x)}$", fontsize=14)
-	titstr = "$S_" + str(s2.N) + "$, slab"
-	title(titstr, fontsize=18)
-	ylim([0, 1.1])
-	grid()
-	show()
+	plot1d.plot_1group_flux(cell, NXMOD)
