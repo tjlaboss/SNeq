@@ -8,47 +8,42 @@ import mesh
 import quadrature
 import material
 import calculator
+from numpy import array
 
 FIXED_SOURCE = 1.0  # TODO: scale by 1, 2, 4pi?
 
-RHO_FUEL = 10.4     # g/cm^3
-RHO_MOD = 0.7       # g/cm^3
-
-# One-group cross sections
-SIGMA_S_U238 = 11.29    # b
-SIGMA_S_O16 = 3.888     # b
-SIGMA_S_H1 = 20.47      # b
-SIGMA_A_H1 = 1.0        # b
-# --> fuel is pure scattering; only absorption is hydrogen
 
 # Define the nuclides
-u238 = material.Nuclide(238, {"scatter": SIGMA_S_U238})
-o16 = material.Nuclide(16, {"scatter": SIGMA_S_O16})
-h1 = material.Nuclide(1, {"scatter": SIGMA_S_H1,
-                          "absorption": SIGMA_A_H1})
-# Define the constituent materials
-fuel_mat = material.Material([u238], RHO_FUEL, name="Fuel")
-mod_mat = material.Material([o16, h1, h1], RHO_MOD, name="Moderator")
+# (Irrelevant, because manually overwritten below)
+u238 = material.Nuclide(238, {"scatter": 10.0})
+h1 = material.Nuclide(1, {"scatter"   : 1.0,
+                          "absorption": 1.0})
 
+# Define the constituent materials
+fuel_mat = material.Material([u238], density=1.0, name="Fuel")
+fuel_mat.macro_xs = {'scatter': array([10.0])}
+
+mod_mat = material.Material([h1], density=1.0, name="Moderator")
+mod_mat.macro_xs = {'absorption': array([1.0]),
+                     'scatter': array([1.0])}
 
 # Cell dimensions
-PITCH = 1.25            # cm; pin pitch
-WIDTH = 0.80            # cm; length of one side of the square fuel pin
+PITCH = 0.6  # cm; pin pitch
+WIDTH = 0.4  # cm; length of one side of the square fuel pin
 
 
 class Pincell1D(mesh.Mesh1D):
 	"""Mesh for a one-dimensional pincell with 3 regions:
 	mod, fuel, and mod
-	
+
 	Parameters:
 	-----------
-	
+
 	nx_mod:         int; number of mesh divisions in each moderator region
 	nx_fuel:        int; number of mesh divisions in the one fuel region
-	
+
 	Attributes:
 	-----------
-	
 	"""
 	def __init__(self, quad, mod, fuel, nx_mod, nx_fuel, groups=1):
 		nx = 2*nx_mod + nx_fuel
@@ -70,11 +65,13 @@ class Pincell1D(mesh.Mesh1D):
 		self.mod1_lim1 = self.nx - 1
 		# Remove the next two lines for non-uniform meshes in each region
 		self._dx_fuel = self.fuel_xwidth/self.nx_fuel
-		self._dx_mod = self.mod_xwidth/self.nx_mod
+		if self.nx_mod:
+			self._dx_mod = self.mod_xwidth/self.nx_mod
+		else:
+			self._dx_mod = 0.0
 		self._dxs = (self._dx_mod, self._dx_fuel, self._dx_mod)
 		#
 		self._populate()
-		
 	
 	def __str__(self):
 		rep = """\
@@ -119,12 +116,28 @@ Indices:
 
 
 # test
-s4 = quadrature.GaussLegendreQuadrature(2)
-cell = Pincell1D(s4, mod_mat, fuel_mat, nx_mod=5, nx_fuel=8)
-solver = calculator.DiamondDifferenceCalculator1D(s4, cell, ("vacuum", "vacuum"))
+s2 = quadrature.GaussLegendreQuadrature(2)
+NXMOD = 6
+NXFUEL = 8
+cell = Pincell1D(s2, mod_mat, fuel_mat, nx_mod=NXMOD, nx_fuel=NXFUEL)
+solver = calculator.DiamondDifferenceCalculator1D(s2, cell, ("reflective", "reflective"))
 solver.transport_sweep()
 solver.solve(eps=1E-10)
 phi = solver.mesh.flux
-phi /= phi.sum()
+phi /= phi.max()
+print(cell)
 print(phi)
-print()
+if True:
+	from pylab import *
+	xvals = range(0, cell.nx)
+	plot(xvals, phi, "b-o")
+	m = 1.1 #phi.max()
+	plot([NXMOD, NXMOD], [0, m], "gray")
+	plot([cell.nx-NXMOD-1, cell.nx-NXMOD-1], [0, m], "gray")
+	xlabel("Node number", fontsize=14)
+	ylabel("$\overline{\phi(x)}$", fontsize=14)
+	titstr = "$S_" + str(s2.N) + "$, slab"
+	title(titstr, fontsize=18)
+	ylim([0, 1.1])
+	grid()
+	show()
