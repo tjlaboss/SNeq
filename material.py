@@ -4,6 +4,7 @@
 
 import constants
 import numpy as np
+from copy import deepcopy
 
 class Nuclide(object):
 	"""
@@ -55,7 +56,7 @@ class Material(object):
 		
 		mgxs_temp = np.zeros(self.g)
 		for reaction in constants.REACTIONS:
-			self._micro_xs[reaction] = mgxs_temp[:]
+			self._micro_xs[reaction] = deepcopy(mgxs_temp)
 		molar_mass = 0.0
 		for nuc in nuclides:
 			assert nuc.g == self.g, \
@@ -68,7 +69,7 @@ class Material(object):
 		self.number_density = density*constants.AVOGADRO/molar_mass*1E-24
 		self.macro_xs = {}
 		for reaction, mgxs in self._micro_xs.items():
-			self.macro_xs[reaction] = mgxs_temp[:]
+			self.macro_xs[reaction] = deepcopy(mgxs_temp)
 			for i in range(self.g):
 				self.macro_xs[reaction][i] = mgxs[i]*self.number_density
 			
