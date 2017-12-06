@@ -19,9 +19,7 @@ class DiamondDifferenceCalculator1D(object):
 	def __init__(self, quad, mesh, bcs):
 		self.quad = quad
 		self.mesh = mesh
-		self._psi_left, self._psi_right = self.__set_bcs(bcs)
-		self.out_right = 0
-		self.out_left = 0
+		self._get_psi_left, self._get_psi_right = self.__set_bcs(bcs)
 	
 	
 	def __set_bcs(self, bcs):
@@ -35,32 +33,32 @@ class DiamondDifferenceCalculator1D(object):
 			raise TypeError(errstr)
 		
 		if "periodic" in bcs:
-			raise NotImplementedError("periodic boundary condition")
-			left = lambda n, g: self.mesh.psi[-1, n, g]
-			right = lambda n, g: self.mesh.psi[0, n, g]
-			return left, right
+			#raise NotImplementedError("periodic boundary condition")
+			get_left = lambda n, g: self.mesh.psi[-1, n, g]
+			get_right = lambda n, g: self.mesh.psi[0, n, g]
+			return get_left, get_right
 		
 		if lc == "reflective":
-			def left(n, g):
+			def get_left(n, g):
 				m = self.quad.reflect_angle(n)
 				return self.mesh.psi[0, m, g]
 		elif lc == "vacuum":
 			# No flux incoming from left
-			left = lambda n, g: 0
+			get_left = lambda n, g: 0
 		else:
 			raise NotImplementedError(lc)
 		
 		if rc == "reflective":
-			def right(n, g):
+			def get_right(n, g):
 				m = self.quad.reflect_angle(n)
 				return self.mesh.psi[-1, m, g]
 		elif rc == "vacuum":
 			# No flux incoming from right
-			right = lambda n, g: 0
+			get_right = lambda n, g: 0
 		else:
 			raise NotImplementedError(rc)
 		
-		return left, right
+		return get_left, get_right
 	
 	
 	def transport_sweep(self):
@@ -76,32 +74,24 @@ class DiamondDifferenceCalculator1D(object):
 		for g in range(self.mesh.groups):
 			# Forward sweep
 			for n in range(self.quad.N2):
-				if self.out_left:
-					psi_in = self.out_left
-				else:
-					psi_in = self._psi_left(n, g)
+				psi_in = self._get_psi_left(n, g)
 				self.mesh.psi[0, n] = psi_in
 				for i in range(self.mesh.nx):
 					node = self.mesh.nodes[i]
 					psi_out = node.flux_out(psi_in, n, g)
 					self.mesh.psi[i+1, n] = psi_out
 					psi_in = psi_out
-				self.out_right = psi_out
 			
 			
 			# Backward sweep
 			for n in range(self.quad.N2, self.quad.N):
-				if self.out_right:
-					psi_in = self.out_right
-				else:
-					psi_in = self._psi_right(n, g)
+				psi_in = self._get_psi_right(n, g)
 				self.mesh.psi[-1, n] = psi_in
 				for i in range(self.mesh.nx):
 					node = self.mesh.nodes[-1-i]
 					psi_out = node.flux_out(psi_in, n, g)
 					self.mesh.psi[-2-i, n] = psi_out
 					psi_in = psi_out
-				self.out_left = psi_out
 				
 			# Update the scalar flux using the Diamond Difference approximation
 			#
@@ -120,8 +110,8 @@ class DiamondDifferenceCalculator1D(object):
 			flux_right = 0.0
 			for n in range(self.quad.N):
 				w = self.quad.weights[n]
-				flux_left += w*(self.mesh.psi[0, n, g] + self._psi_left(n, g))/2.0
-				flux_right += w*(self.mesh.psi[-1, n, g] + self._psi_right(n, g))/2.0
+				flux_left += w*(self.mesh.psi[0, n, g] + self._get_psi_left(n, g))/2.0
+				flux_right += w*(self.mesh.psi[-1, n, g] + self._get_psi_right(n, g))/2.0
 			self.mesh.flux[0, g] = flux_left
 			self.mesh.flux[-1, g] = flux_right
 			

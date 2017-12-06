@@ -111,23 +111,18 @@ Indices:
 			else:
 				mod_node = node.Node1D(dx, self.quad, self.mod.macro_xs)
 				self.nodes[i] = mod_node
-		# Initialize flux guess
-		#for g in range(self.groups):
-		#	for i in range(self.nx):
-		#		self.flux[i, g] = self.nodes[i].flux[g]
 
 
 # test
-s2 = quadrature.GaussLegendreQuadrature(2)
-NXMOD = 0
+s2 = quadrature.GaussLegendreQuadrature(8)
+NXMOD = 10
 NXFUEL = 8
 cell = Pincell1D(s2, mod_mat, fuel_mat, nx_mod=NXMOD, nx_fuel=NXFUEL)
-solver = calculator.DiamondDifferenceCalculator1D(s2, cell, ("reflective", "reflective"))
+solver = calculator.DiamondDifferenceCalculator1D(s2, cell, ("vacuum", "vacuum"))
 solver.transport_sweep()
 solver.solve(eps=1E-5, maxiter=1000)
 phi = solver.mesh.flux
-#phi /= phi.max()
 print(cell)
 print(phi)
 if True:
-	plot1d.plot_1group_flux(cell, NXMOD)
+	plot1d.plot_1group_flux(cell, False, NXMOD)

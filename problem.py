@@ -113,10 +113,6 @@ Indices:
 			else:
 				mod_node = node.Node1D(dx, self.quad, self.mod.macro_xs)
 				self.nodes[i] = mod_node
-		# Initialize flux guess
-		#for g in range(self.groups):
-		#	for i in range(self.nx):
-		#		self.flux[i, g] = self.nodes[i].flux[g]
 
 
 # test
@@ -126,9 +122,8 @@ solver = calculator.DiamondDifferenceCalculator1D(s4, cell, ("vacuum", "vacuum")
 solver.transport_sweep()
 solver.solve(eps=1E-10)
 phi = solver.mesh.flux
-phi /= phi.sum()
 print(phi)
 print(mod_mat.macro_xs)
 print(fuel_mat.macro_xs)
 if True:
-	plot1d.plot_1group_flux(cell)
+	plot1d.plot_1group_flux(cell, True, nxmod=5)
