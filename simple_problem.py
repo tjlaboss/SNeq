@@ -22,7 +22,8 @@ h1 = material.Nuclide(1, {"scatter"   : 1.0,
 
 # Define the constituent materials
 fuel_mat = material.Material([u238], density=1.0, name="Fuel")
-fuel_mat.macro_xs = {'scatter': array([10.0])}
+fuel_mat.macro_xs = {'scatter': array([1.0]),
+                     'absorption': array([0.1])}
 
 mod_mat = material.Material([h1], density=1.0, name="Moderator")
 mod_mat.macro_xs = {'absorption': array([0.1]),
@@ -118,14 +119,14 @@ Indices:
 
 # test
 s2 = quadrature.GaussLegendreQuadrature(2)
-NXMOD = 6
+NXMOD = 0
 NXFUEL = 8
 cell = Pincell1D(s2, mod_mat, fuel_mat, nx_mod=NXMOD, nx_fuel=NXFUEL)
 solver = calculator.DiamondDifferenceCalculator1D(s2, cell, ("reflective", "reflective"))
 solver.transport_sweep()
-solver.solve(eps=1E-5)
+solver.solve(eps=1E-5, maxiter=1000)
 phi = solver.mesh.flux
-phi /= phi.max()
+#phi /= phi.max()
 print(cell)
 print(phi)
 if True:

@@ -20,6 +20,8 @@ class DiamondDifferenceCalculator1D(object):
 		self.quad = quad
 		self.mesh = mesh
 		self._psi_left, self._psi_right = self.__set_bcs(bcs)
+		self.out_right = 0
+		self.out_left = 0
 	
 	
 	def __set_bcs(self, bcs):
@@ -39,8 +41,9 @@ class DiamondDifferenceCalculator1D(object):
 			return left, right
 		
 		if lc == "reflective":
-			# FIXME: This doesn't work
-			left = lambda n, g: self.mesh.psi[1, n, g]
+			def left(n, g):
+				m = self.quad.reflect_angle(n)
+				return self.mesh.psi[0, m, g]
 		elif lc == "vacuum":
 			# No flux incoming from left
 			left = lambda n, g: 0
@@ -48,8 +51,9 @@ class DiamondDifferenceCalculator1D(object):
 			raise NotImplementedError(lc)
 		
 		if rc == "reflective":
-			# FIXME: This doesn't work
-			right = lambda n, g: self.mesh.psi[-2, n, g]
+			def right(n, g):
+				m = self.quad.reflect_angle(n)
+				return self.mesh.psi[-1, m, g]
 		elif rc == "vacuum":
 			# No flux incoming from right
 			right = lambda n, g: 0
@@ -67,28 +71,40 @@ class DiamondDifferenceCalculator1D(object):
 		float; the L2 engineering norm after this sweep
 		"""
 		old_flux = np.array(self.mesh.flux[:, :])
-		N2 = self.quad.N//2
 		
 		# TODO: Make the multiple energy groups do anything
 		for g in range(self.mesh.groups):
 			# Forward sweep
-			for n in range(N2):
-				psi_in = self._psi_left(n, g)
+			for n in range(self.quad.N2):
+				if self.out_left:
+					psi_in = self.out_left
+				else:
+					psi_in = self._psi_left(n, g)
+				self.mesh.psi[0, n] = psi_in
 				for i in range(self.mesh.nx):
 					node = self.mesh.nodes[i]
 					psi_out = node.flux_out(psi_in, n, g)
-					self.mesh.psi[i, n] = psi_out
+					self.mesh.psi[i+1, n] = psi_out
+					psi_in = psi_out
+				self.out_right = psi_out
+			
 			
 			# Backward sweep
-			for n in range(N2, self.quad.N):
-				psi_in = self._psi_right(n, g)
+			for n in range(self.quad.N2, self.quad.N):
+				if self.out_right:
+					psi_in = self.out_right
+				else:
+					psi_in = self._psi_right(n, g)
+				self.mesh.psi[-1, n] = psi_in
 				for i in range(self.mesh.nx):
 					node = self.mesh.nodes[-1-i]
 					psi_out = node.flux_out(psi_in, n, g)
-					self.mesh.psi[-1-i, n] = psi_out
-			
+					self.mesh.psi[-2-i, n] = psi_out
+					psi_in = psi_out
+				self.out_left = psi_out
+				
 			# Update the scalar flux using the Diamond Difference approximation
-			
+			#
 			# Interior nodes
 			for i in range(1, self.mesh.nx - 1):
 				flux_i = 0.0
