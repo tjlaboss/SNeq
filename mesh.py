@@ -16,12 +16,13 @@ class Mesh(object):
 	quad:           Quadrature; num-D angular quadrature to use
 	wxyz:           list(len=num) of floats, cm; the sizes of each dimension
 	nxyz:           list(len=num) of ints; number of nodes of each dimension
+	groups:         int; number of energy groups
 	
 	Attributes:
 	-----------
 	
 	"""
-	def __init__(self, num, quad, wxyz, nxyz):
+	def __init__(self, num, quad, wxyz, nxyz, groups):
 		assert len(wxyz) == num, \
 			"Wrong number of entries for wxyz in {} dimensions".format(num)
 		assert len(nxyz) == num, \
@@ -30,6 +31,7 @@ class Mesh(object):
 		self.quad = quad
 		#self.wxyz = wxyz
 		#self.nxyz = nxyz
+		self.groups = groups
 	
 	def _populate(self):
 		"""Populate the mesh with appropriate nodes"""
@@ -48,13 +50,13 @@ class Mesh1D(Mesh):
 	-----------
 	
 	"""
-	def __init__(self, quad, xwidth, nx):
-		super().__init__(1, quad, [xwidth], [nx])
+	def __init__(self, quad, xwidth, nx, groups):
+		super().__init__(1, quad, [xwidth], [nx], groups)
 		self.nx = nx
 		self.xwidth = xwidth
 		self.nodes = np.empty(nx, dtype=node.Node1D)
-		self.flux = np.zeros(nx)
-		self.psi = np.zeros((nx, quad.N))
+		self.flux = np.zeros((nx, groups))
+		self.psi = np.zeros((nx + 1, quad.N, groups))
 		
 	def get_dx(self, i):
 		"""Return the mesh spacing for the ith node.
@@ -68,6 +70,7 @@ class Mesh1D(Mesh):
 	
 	def update_nodal_fluxes(self):
 		"""Update the scalar flux in the nodes from that on the mesh."""
-		for i in range(self.nx):
-			self.nodes[i].flux = self.flux[i]
+		for g in range(self.groups):
+			for i in range(self.nx):
+				self.nodes[i].flux[g] = self.flux[i, g]
 

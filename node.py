@@ -58,7 +58,7 @@ class Node1D(object):
 	nu_sigma_f (not implemented yet)
 	sigma_s
 	sigma_t
-	flux:               scalar flux in the node
+	flux:               scalar flux in the node per energy group
 	"""
 	def __init__(self, dx, quad, cross_sections, source=0.0, groups=1, name=""):
 		self.dx = dx
@@ -74,13 +74,15 @@ class Node1D(object):
 		for g in range(groups):
 			if self.sigma_t[g] < self.sigma_s[g]:
 				self.flux[g] = source/(self.sigma_t[g] - self.sigma_s[g])
+			else:
+				self.flux[g] = source
 		
 		# Precalcuate a commonly-used term
 		N = self.quad.N
 		self._flux_coeffs = np.empty((N, groups))
 		self._flux_denoms = np.empty((N, groups))
 		for n in range(N):
-			two_mu = 2*self.quad.mus[n]
+			two_mu = 2*abs(self.quad.mus[n])
 			for g in range(groups):
 				prod = dx*self.sigma_t[g]
 				self._flux_coeffs[n, g] = two_mu - prod

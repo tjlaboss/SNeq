@@ -4,6 +4,7 @@
 
 import numpy as np
 from warnings import warn
+from constants import BOUNDARY_CONDITIONS
 
 class DiamondDifferenceCalculator1D(object):
 	"""One-group, one-dimensional diamond difference solver
@@ -13,10 +14,51 @@ class DiamondDifferenceCalculator1D(object):
 	quad:           Quadrature; 1-D angular quadrature to use
 	mesh:           Mesh1D; 1-D mesh to solve on.
 					Use one tailored to your problem.
+	bcs:            tuple of ("left", "right")
 	"""
-	def __init__(self, quad, mesh):
+	def __init__(self, quad, mesh, bcs):
 		self.quad = quad
 		self.mesh = mesh
+		self._get_psi_left, self._get_psi_right = self.__set_bcs(bcs)
+	
+	
+	def __set_bcs(self, bcs):
+		for bc in bcs:
+			assert bc in BOUNDARY_CONDITIONS, \
+				"{} is an unknown boundary condition.".format(bc)
+		lc, rc = bcs
+		if "periodic" in bcs and lc != rc:
+			errstr = "If one edge has a periodic boundary condition, " \
+			         "both sides must."
+			raise TypeError(errstr)
+		
+		if "periodic" in bcs:
+			#raise NotImplementedError("periodic boundary condition")
+			get_left = lambda n, g: self.mesh.psi[-1, n, g]
+			get_right = lambda n, g: self.mesh.psi[0, n, g]
+			return get_left, get_right
+		
+		if lc == "reflective":
+			def get_left(n, g):
+				m = self.quad.reflect_angle(n)
+				return self.mesh.psi[0, m, g]
+		elif lc == "vacuum":
+			# No flux incoming from left
+			get_left = lambda n, g: 0
+		else:
+			raise NotImplementedError(lc)
+		
+		if rc == "reflective":
+			def get_right(n, g):
+				m = self.quad.reflect_angle(n)
+				return self.mesh.psi[-1, m, g]
+		elif rc == "vacuum":
+			# No flux incoming from right
+			get_right = lambda n, g: 0
+		else:
+			raise NotImplementedError(rc)
+		
+		return get_left, get_right
 	
 	
 	def transport_sweep(self):
@@ -26,45 +68,67 @@ class DiamondDifferenceCalculator1D(object):
 		--------
 		float; the L2 engineering norm after this sweep
 		"""
-		# TODO: Align the iterations and boundary conditions
-		old_flux = self.mesh.flux[:]
-		N2 = self.quad.N//2
+		old_flux = np.array(self.mesh.flux[:, :])
 		
-		# Forward sweep
-		for n in range(N2):
-			psi_in = 0.0
-			for i in range(self.mesh.nx):
-				node = self.mesh.nodes[i]
-				psi_out = node.flux_out(psi_in, n)
-				self.mesh.psi[i, n] = psi_out
+		# TODO: Make the multiple energy groups do anything
+		for g in range(self.mesh.groups):
+			# Forward sweep
+			for n in range(self.quad.N2):
+				psi_in = self._get_psi_left(n, g)
+				self.mesh.psi[0, n] = psi_in
+				for i in range(self.mesh.nx):
+					node = self.mesh.nodes[i]
+					psi_out = node.flux_out(psi_in, n, g)
+					self.mesh.psi[i+1, n] = psi_out
+					psi_in = psi_out
+			
+			
+			# Backward sweep
+			for n in range(self.quad.N2, self.quad.N):
+				psi_in = self._get_psi_right(n, g)
+				self.mesh.psi[-1, n] = psi_in
+				for i in range(self.mesh.nx):
+					node = self.mesh.nodes[-1-i]
+					psi_out = node.flux_out(psi_in, n, g)
+					self.mesh.psi[-2-i, n] = psi_out
+					psi_in = psi_out
+				
+			# Update the scalar flux using the Diamond Difference approximation
+			#
+			# Interior nodes
+			for i in range(1, self.mesh.nx - 1):
+				flux_i = 0.0
+				for n in range(self.quad.N):
+					w = self.quad.weights[n]
+					psi_plus = self.mesh.psi[i+1, n]
+					psi_minus = self.mesh.psi[i, n]
+					flux_i += w*(psi_plus + psi_minus)/2.0
+				self.mesh.flux[i, g] = flux_i
 		
-		# Backward sweep
-		for n in range(N2+1, self.quad.N):
-			psi_in = 0.0
-			for i in range(self.mesh.nx):
-				node = self.mesh.nodes[-1-i]
-				psi_out = node.flux_out(psi_in, n)
-				self.mesh.psi[-1-i, n] = psi_out
-		
-		# Update the scalar flux using the Diamond Difference approximation
-		for i in range(self.mesh.nx):
-			flux_i = 0.0
+			# Boundary nodes
+			flux_left = 0.0
+			flux_right = 0.0
 			for n in range(self.quad.N):
 				w = self.quad.weights[n]
-				psi_plus = self.mesh.psi[i+1, n]
-				psi_minus = self.mesh.psi[i, n]
-				flux_i += w*(psi_plus + psi_minus)/2.0
-			self.mesh.flux[i] = flux_i
+				flux_left += w*(self.mesh.psi[0, n, g] + self._get_psi_left(n, g))/2.0
+				flux_right += w*(self.mesh.psi[-1, n, g] + self._get_psi_right(n, g))/2.0
+			self.mesh.flux[0, g] = flux_left
+			self.mesh.flux[-1, g] = flux_right
+			
 		self.mesh.update_nodal_fluxes()
-		
+			
 		# Find the relative difference using the L2 engineering norm
 		diff = 0.0
-		for i in range(self.mesh.nx):
-			diff += (self.mesh.flux[i] - old_flux[i])**2
+		for g in range(self.mesh.groups):
+			for i in range(self.mesh.nx):
+				phi_i1 = self.mesh.flux[i, g]
+				phi_i0 = old_flux[i, g]
+				if phi_i1 != phi_i0:
+					diff += ((phi_i1 - phi_i0)/phi_i1)**2
 		
 		return np.sqrt(diff/self.mesh.nx)
 			
-	def solve(self, eps, maxiter=100):
+	def solve(self, eps, maxiter=1000):
 		"""Solve on the mesh within tolerance
 		
 		Parameters:
@@ -81,6 +145,7 @@ class DiamondDifferenceCalculator1D(object):
 		count = 0
 		while diff > eps:
 			diff = self.transport_sweep()
+			#print(count, ":\t", diff)
 			
 			count += 1
 			if count >= maxiter:
