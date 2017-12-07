@@ -9,19 +9,30 @@ import quadrature
 import material
 import calculator
 import plot1d
-from numpy import array
+import constants
+import pickle
 
-FIXED_SOURCE = 1.0  # TODO: scale by 1, 2, 4pi?
+FIXED_SOURCE = 1.0
 
+# Load the cross sections from disk
+file1 = open(constants.FNAME1, "rb")
+mg1 = pickle.load(file1)
+file1.close()
+mod_mat = material.Material(name="Moderator", groups=1)
+mod_mat.macro_xs = mg1["mod"]
 
-# Define the constituent materials
-fuel_mat = material.Material(groups=1)
-fuel_mat.macro_xs = {'scatter': array([1.0]),
-                     'absorption': array([0.1])}
+fuel_mat = material.Material(name="Fuel, 3.1%", groups=1)
+fuel_mat.macro_xs = mg1["fuel"]
 
-mod_mat = material.Material(groups=1)
-mod_mat.macro_xs = {'absorption': array([0.1]),
-                     'scatter': array([10.0])}
+'''
+# analytically calculate kinf from the 1-group xs
+# note: don't have absorption cross section...oops
+kinf = mg1["fuel"]["nu-fission"]/(mg1["fuel"]["total"] - mg1["fuel"]["nu-scatter"])
+kinf = float(kinf)
+print("kinf = {:1.5f}".format(kinf))
+exit()
+'''
+
 
 # Cell dimensions
 PITCH = 0.6  # cm; pin pitch
@@ -100,7 +111,8 @@ Indices:
 			region = self.get_region(i)
 			dx = self.get_dx(i)
 			if region == 1:
-				fuel_node = node.Node1D(dx, self.quad, self.fuel.macro_xs, FIXED_SOURCE)
+				fuel_node = node.Node1D(dx, self.quad, self.fuel.macro_xs,
+				                        source=FIXED_SOURCE)
 				self.nodes[i] = fuel_node
 			else:
 				mod_node = node.Node1D(dx, self.quad, self.mod.macro_xs)
@@ -108,15 +120,15 @@ Indices:
 
 
 # test
-s2 = quadrature.GaussLegendreQuadrature(8)
-NXMOD = 10
+s2 = quadrature.GaussLegendreQuadrature(2)
+NXMOD = 0
 NXFUEL = 8
 cell = Pincell1D(s2, mod_mat, fuel_mat, nx_mod=NXMOD, nx_fuel=NXFUEL)
-solver = calculator.DiamondDifferenceCalculator1D(s2, cell, ("vacuum", "vacuum"))
-solver.transport_sweep()
+solver = calculator.DiamondDifferenceCalculator1D(s2, cell, ("reflective", "reflective"), kguess=11)
+solver.transport_sweep(11)
 solver.solve(eps=1E-5, maxiter=1000)
 phi = solver.mesh.flux
 print(cell)
 print(phi)
-if True:
+if False:
 	plot1d.plot_1group_flux(cell, False, NXMOD)

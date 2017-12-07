@@ -15,10 +15,14 @@ class DiamondDifferenceCalculator1D(object):
 	mesh:           Mesh1D; 1-D mesh to solve on.
 					Use one tailored to your problem.
 	bcs:            tuple of ("left", "right")
+	kguess:         float; initial guess for the eigenvalue
+					[Default: 1.0]
 	"""
-	def __init__(self, quad, mesh, bcs):
+	def __init__(self, quad, mesh, bcs, kguess=1.0):
 		self.quad = quad
 		self.mesh = mesh
+		self.k = kguess
+		self.fission_source = np.ones(self.mesh.nx)
 		self._get_psi_left, self._get_psi_right = self.__set_bcs(bcs)
 	
 	
@@ -61,7 +65,7 @@ class DiamondDifferenceCalculator1D(object):
 		return get_left, get_right
 	
 	
-	def transport_sweep(self):
+	def transport_sweep(self, k):
 		"""Perform one forward and one backward transport sweep.
 		
 		Returns:
@@ -69,7 +73,6 @@ class DiamondDifferenceCalculator1D(object):
 		float; the L2 engineering norm after this sweep
 		"""
 		old_flux = np.array(self.mesh.flux[:, :])
-		
 		# TODO: Make the multiple energy groups do anything
 		for g in range(self.mesh.groups):
 			# Forward sweep
@@ -78,7 +81,7 @@ class DiamondDifferenceCalculator1D(object):
 				self.mesh.psi[0, n] = psi_in
 				for i in range(self.mesh.nx):
 					node = self.mesh.nodes[i]
-					psi_out = node.flux_out(psi_in, n, g)
+					psi_out = node.flux_out(psi_in, n, g, k)
 					self.mesh.psi[i+1, n] = psi_out
 					psi_in = psi_out
 			
@@ -89,7 +92,7 @@ class DiamondDifferenceCalculator1D(object):
 				self.mesh.psi[-1, n] = psi_in
 				for i in range(self.mesh.nx):
 					node = self.mesh.nodes[-1-i]
-					psi_out = node.flux_out(psi_in, n, g)
+					psi_out = node.flux_out(psi_in, n, g, k)
 					self.mesh.psi[-2-i, n] = psi_out
 					psi_in = psi_out
 				
@@ -116,17 +119,28 @@ class DiamondDifferenceCalculator1D(object):
 			self.mesh.flux[-1, g] = flux_right
 			
 		self.mesh.update_nodal_fluxes()
-			
-		# Find the relative difference using the L2 engineering norm
-		diff = 0.0
+		
+		# Get the fission source and flux differences
+		fluxdiff = 0.0
+		fsdiff = 0.0
+		s_new = np.zeros(self.mesh.nx)
 		for g in range(self.mesh.groups):
 			for i in range(self.mesh.nx):
 				phi_i1 = self.mesh.flux[i, g]
 				phi_i0 = old_flux[i, g]
 				if phi_i1 != phi_i0:
-					diff += ((phi_i1 - phi_i0)/phi_i1)**2
+					fluxdiff += ((phi_i1 - phi_i0)/phi_i1)**2
+				# And get the new fission source
+				fs1 = self.mesh.nodes[i].get_fission_source(g, 1)
+				fs0 = self.fission_source[i]
+				s_new[i] += fs1
+				fsdiff += ((fs1 - fs0)/fs1)**2
+		rms_flux = np.sqrt(fluxdiff/self.mesh.nx)
+		rms_fs = np.sqrt(fsdiff/self.mesh.nx)
 		
-		return np.sqrt(diff/self.mesh.nx)
+		
+		
+		return s_new, rms_fs, rms_flux
 			
 	def solve(self, eps, maxiter=1000):
 		"""Solve on the mesh within tolerance
@@ -141,17 +155,32 @@ class DiamondDifferenceCalculator1D(object):
 		--------
 		flux:           numpy array of the scalar flux
 		"""
-		diff = eps + 1
+		fsdiff = eps + 1
+		fluxdiff = eps + 1
 		count = 0
-		while diff > eps:
-			diff = self.transport_sweep()
-			#print(count, ":\t", diff)
+		# Outer: converge the fission source
+		while fsdiff > eps:
 			
-			count += 1
-			if count >= maxiter:
-				errstr = "Solution did NOT converge after {} iterations; aborting."
-				warn(errstr.format(count))
-				return self.mesh.flux
+			while fluxdiff > eps:
+				fs, fsdiff, fluxdiff = self.transport_sweep(self.k)
+				# Inner: converge the flux
+				# Find the relative difference in flux using the L2 engineering norm
+				
+				count += 1
+				if count >= maxiter:
+					errstr = "Solution did NOT converge after {} iterations; aborting."
+					warn(errstr.format(count))
+					return self.mesh.flux
+			
+			# Now that flux has been converged, guess a new k
+			# and update the fission source
+			# Also find the relative difference in k
+			print(self.fission_source, "->", fs)
+			k_new = fs.sum()/self.fission_source.sum()
+			kdiff = abs(k_new - self.k)/k_new
+			self.fission_source = fs
+			print("k: {}\tkdiff: {}".format(k_new, kdiff))
+			
 		
 		print("Solution converged after {} iterations.".format(count))
 		return self.mesh.flux
