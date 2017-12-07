@@ -21,11 +21,11 @@ h1 = material.Nuclide(1, {"scatter"   : 1.0,
                           "absorption": 1.0})
 
 # Define the constituent materials
-fuel_mat = material.Material([u238], density=1.0, name="Fuel")
+fuel_mat = material.Material(groups=1)
 fuel_mat.macro_xs = {'scatter': array([1.0]),
                      'absorption': array([0.1])}
 
-mod_mat = material.Material([h1], density=1.0, name="Moderator")
+mod_mat = material.Material(groups=1)
 mod_mat.macro_xs = {'absorption': array([0.1]),
                      'scatter': array([10.0])}
 
@@ -52,7 +52,7 @@ class Pincell1D(mesh.Mesh1D):
 		super().__init__(quad, PITCH, nx, groups)
 		self.fuel = fuel
 		self.mod = mod
-		assert groups == fuel_mat.g == mod_mat.g, \
+		assert groups == fuel_mat.groups == mod_mat.groups, \
 			"Unequal number of energy groups in problem and materials."
 		self.nx_mod = nx_mod
 		self.nx_fuel = nx_fuel
