@@ -2,10 +2,10 @@
 #
 # Construct an OpenMC square pincell. Tally it to get 2-group cross sections.
 
+import pickle
 import openmc
 import openmc.mgxs as mgxs
-from numpy import array
-import pickle
+from openmc_model.group_structure import ngroups
 
 # Run settings
 EXPORT = True
@@ -15,8 +15,8 @@ DIMENSIONS = 1  # use 1D or 2D for purposes of this project
 WIDTH = 0.8     # cm; width of one side of the pin cell
 PITCH = 1.25    # cm; pin pitch
 # Use the CASMO 2-group energy structure
-two_groups = mgxs.EnergyGroups()
-two_groups.group_edges = array([0.0, 0.625, 20E6])  # eV
+two_groups = ngroups[2]
+
 
 # Load materials and export
 """
@@ -90,14 +90,14 @@ root_universe.add_cell(root_cell)
 openmc_geometry.root_universe = root_universe
 
 # Do the cross section tallies
-pcm_trigger = openmc.Trigger("std_dev", 2E-5)
+trigger_5pcm = openmc.Trigger("std_dev", 5E-5)
 lib = mgxs.Library(openmc_geometry)
 lib.energy_groups = two_groups
 lib.mgxs_types = ['total', 'nu-fission', 'transport', 'chi', 'consistent nu-scatter matrix']
 lib.by_nuclide = False
 lib.domain_type = "material"
 lib.domains = [uo2, water]
-lib.tally_trigger = pcm_trigger
+lib.tally_trigger = trigger_5pcm
 lib.build_library()
 openmc_tallies = openmc.Tallies()
 lib.add_to_tallies_file(openmc_tallies)
