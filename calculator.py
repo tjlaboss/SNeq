@@ -115,8 +115,8 @@ class DiamondDifferenceCalculator1D(object):
 				flux_i = 0.0
 				for n in range(self.quad.N):
 					w = self.quad.weights[n]
-					psi_plus = self.mesh.psi[i+1, n]
-					psi_minus = self.mesh.psi[i, n]
+					psi_plus = self.mesh.psi[i+1, n, g]
+					psi_minus = self.mesh.psi[i, n, g]
 					flux_i += w*(psi_plus + psi_minus)/2.0
 				self.mesh.flux[i, g] = flux_i
 		
@@ -138,12 +138,13 @@ class DiamondDifferenceCalculator1D(object):
 		fs_new = self.mesh.calculate_fission_source()
 		
 		for i in range(self.mesh.nx):
-			# Calculate the fission source difference
-			fs0 = self.fission_source[i]
-			fs1 = fs_new[i]
-			fsdiff += ((fs1 - fs0)/fs1)**2
-			# Calculate the flux difference
 			for g in range(self.mesh.groups):
+				# Calculate the fission source difference
+				fs0 = self.fission_source[i, g]
+				fs1 = fs_new[i, g]
+				if fs1 != fs0:
+					fsdiff += ((fs1 - fs0)/fs1)**2
+				# Calculate the flux difference
 				phi_i1 = self.mesh.flux[i, g]
 				phi_i0 = old_flux[i, g]
 				if phi_i1 != phi_i0:

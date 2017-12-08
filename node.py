@@ -36,8 +36,8 @@ def _group_cross_sections_from_dict(cross_sections, groups):
 		nu_sigma_f = cross_sections["nu-fission"]
 	if "chi" in cross_sections:
 		chi = cross_sections["chi"]
-	else:
-		chi[-1] = 1.0
+	elif nu_sigma_f.any():
+		chi[0] = 1.0
 	if "total" in cross_sections:
 		sigma_t = cross_sections["total"]
 	else:
@@ -71,7 +71,7 @@ class Node1D(object):
 	sigma_t
 	flux:               scalar flux in the node per energy group
 	"""
-	def __init__(self, dx, quad, cross_sections, source=0.0, groups=1, name=""):
+	def __init__(self, dx, quad, cross_sections, groups, source=0.0, name=""):
 		self.dx = dx
 		self.quad = quad
 		self._source = source
