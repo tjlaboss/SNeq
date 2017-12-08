@@ -11,8 +11,9 @@ import calculator
 import plot1d
 import constants
 import pickle
+import numpy as np
 
-FIXED_SOURCE = 1.0
+FIXED_SOURCE = 0.0
 
 # Load the cross sections from disk
 file1 = open(constants.FNAME1, "rb")
@@ -23,15 +24,13 @@ mod_mat.macro_xs = mg1["mod"]
 
 fuel_mat = material.Material(name="Fuel, 3.1%", groups=1)
 fuel_mat.macro_xs = mg1["fuel"]
+# debug
+fuel_mat.macro_xs["nu-fission"] = np.array([0.1])
 
-'''
 # analytically calculate kinf from the 1-group xs
 # note: don't have absorption cross section...oops
-kinf = mg1["fuel"]["nu-fission"]/(mg1["fuel"]["total"] - mg1["fuel"]["nu-scatter"])
-kinf = float(kinf)
+kinf = float(mg1["fuel"]["nu-fission"]/mg1["fuel"]["absorption"])
 print("kinf = {:1.5f}".format(kinf))
-exit()
-'''
 
 
 # Cell dimensions
@@ -79,6 +78,9 @@ class Pincell1D(mesh.Mesh1D):
 		self._dxs = (self._dx_mod, self._dx_fuel, self._dx_mod)
 		#
 		self._populate()
+		# debug
+		self.flux[:, :] = 1.0
+		self.update_nodal_fluxes()
 	
 	def __str__(self):
 		rep = """\
@@ -106,6 +108,22 @@ Indices:
 		j = self.get_region(i)
 		return self._dxs[j]
 	
+	def calculate_fission_source(self):
+		"""One-group. Temporary function. Delete this."""
+		fs = np.zeros(self.nx)
+		for i in range(self.nx):
+			phi = self.flux[i].squeeze()
+			fs[i] = phi*self.nodes[i].nu_sigma_f.squeeze()
+		return fs
+	
+	def calculate_scatter_source(self):
+		"""One-group. Temporary function. delete this too"""
+		ss = np.zeros(self.nx)
+		for i in range(self.nx):
+			phi = self.flux[i].squeeze()
+			ss[i] = phi*self.nodes[i].scatter_matrix.squeeze()
+		return ss
+	
 	def _populate(self):
 		for i in range(self.nx):
 			region = self.get_region(i)
@@ -120,15 +138,17 @@ Indices:
 
 
 # test
-s2 = quadrature.GaussLegendreQuadrature(2)
+s2 = quadrature.GaussLegendreQuadrature(6)
 NXMOD = 0
-NXFUEL = 8
+NXFUEL = 10
+KGUESS = kinf
 cell = Pincell1D(s2, mod_mat, fuel_mat, nx_mod=NXMOD, nx_fuel=NXFUEL)
-solver = calculator.DiamondDifferenceCalculator1D(s2, cell, ("reflective", "reflective"), kguess=11)
-solver.transport_sweep(11)
-solver.solve(eps=1E-5, maxiter=1000)
+solver = calculator.DiamondDifferenceCalculator1D(s2, cell, ("reflective", "reflective"), kguess=KGUESS)
+#solver.transport_sweep(KGUESS)
+solver.solve(eps=1E-5, maxiter=100)
 phi = solver.mesh.flux
 print(cell)
 print(phi)
+print(solver.k)
 if False:
 	plot1d.plot_1group_flux(cell, False, NXMOD)

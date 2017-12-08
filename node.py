@@ -125,11 +125,16 @@ Node: {self.name}
 		# into the fastest group
 		fission = self.get_fission_source(g, k)
 		# Evaluate the scatter matrix
+		# maybe scattering source is what's screwing up ther problem?
+		#scatter = 0
+		scatter = (self.scatter_matrix*self.flux)[g]
+		'''
 		# TODO: Check whether this is correct
 		if self.scatter_matrix:
 			scatter = (self.scatter_matrix*self.flux)[g]
 		else:
 			scatter = self.sigma_s[g]*self.flux[g]
+		'''
 		qbar = 0.5*(scatter + fission + self._source)
 		return qbar
 	
