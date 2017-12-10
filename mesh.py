@@ -55,7 +55,7 @@ class Mesh1D(Mesh):
 		self.nx = nx
 		self.xwidth = xwidth
 		self.nodes = np.empty(nx, dtype=node.Node1D)
-		self.flux = np.zeros((nx, groups))
+		self.flux = np.ones((nx, groups))
 		self.psi = np.zeros((nx + 1, quad.N, groups))
 		
 	def get_dx(self, i):

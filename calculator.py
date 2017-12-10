@@ -73,7 +73,6 @@ class DiamondDifferenceCalculator1D(object):
 		float; the L2 engineering norm after this sweep
 		"""
 		old_flux = np.array(self.mesh.flux[:, :])
-		# TODO: Make the multiple energy groups do anything
 		for g in range(self.mesh.groups):
 			# Forward sweep
 			for n in range(self.quad.N2):
@@ -85,8 +84,8 @@ class DiamondDifferenceCalculator1D(object):
 					
 					#psi_out = node.flux_out(psi_in, n, g, k)
 					q = 0.5*self.fission_source[i]/k + 0.5*self.scatter_source[i]
-					psi_out = psi_in*(2*mu - node.dx*node.sigma_t) + 2*node.dx*q
-					psi_out /= 2*mu + node.dx*node.sigma_t
+					psi_out = psi_in*(2*mu - node.dx*node.sigma_tr) + 2*node.dx*q
+					psi_out /= 2*mu + node.dx*node.sigma_tr
 					
 					self.mesh.psi[i+1, n] = psi_out
 					psi_in = psi_out
@@ -102,11 +101,14 @@ class DiamondDifferenceCalculator1D(object):
 					
 					#psi_out = node.flux_out(psi_in, n, g, k)
 					q = 0.5*self.fission_source[i]/k + 0.5*self.scatter_source[i]
-					psi_out = psi_in*(2*mu - node.dx*node.sigma_t) + 2*node.dx*q
-					psi_out /= 2*mu + node.dx*node.sigma_t
+					psi_out = psi_in*(2*mu - node.dx*node.sigma_tr) + 2*node.dx*q
+					psi_out /= 2*mu + node.dx*node.sigma_tr
 					
 					self.mesh.psi[-2-i, n] = psi_out
 					psi_in = psi_out
+			# debug
+			#for n in range(self.quad.N):
+			#	self.mesh.psi[0, n] = self._get_psi_left(n, g)
 				
 			# Update the scalar flux using the Diamond Difference approximation
 			#
@@ -130,7 +132,7 @@ class DiamondDifferenceCalculator1D(object):
 			self.mesh.flux[0, g] = flux_left
 			self.mesh.flux[-1, g] = flux_right
 			
-		self.mesh.update_nodal_fluxes()
+		#self.mesh.update_nodal_fluxes()
 		
 		# Get the fission source and flux differences
 		fluxdiff = 0.0
@@ -186,7 +188,7 @@ class DiamondDifferenceCalculator1D(object):
 				if inner_count >= maxiter:
 					errstr = "Solution did NOT converge after {} inner iterations; aborting."
 					warn(errstr.format(inner_count))
-					return self.mesh.flux
+					return False
 				
 				#print("Inner Iter {}: flux, rms = {}".format(inner_count, fluxdiff))
 				#print(self.mesh.flux)
@@ -214,9 +216,9 @@ class DiamondDifferenceCalculator1D(object):
 			if outer_count >= maxiter:
 				errstr = "Solution did NOT converge after {} outer iterations; aborting."
 				warn(errstr.format(outer_count))
-				return self.mesh.flux
+				return False
 			
 		
 		print("Solution converged after {} outer iterations.".format(outer_count))
-		return self.mesh.flux
+		return True
 		
