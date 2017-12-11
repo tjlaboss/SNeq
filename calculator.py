@@ -17,11 +17,14 @@ class DiamondDifferenceCalculator1D(object):
 	bcs:            tuple of ("left", "right")
 	kguess:         float; initial guess for the eigenvalue
 					[Default: 1.0]
+	accelerator:    Accelerator, if one is desired
+					[Default: None]
 	"""
-	def __init__(self, quad, mesh, bcs, kguess=1.0):
+	def __init__(self, quad, mesh, bcs, kguess=1.0, accelerator=None):
 		self.quad = quad
 		self.mesh = mesh
 		self.k = kguess
+		self.accelerator = accelerator
 		self.fission_source = self.mesh.calculate_fission_source()
 		self.scatter_source = self.mesh.calculate_scatter_source()
 		self._get_psi_left, self._get_psi_right = self.__set_bcs(bcs)
@@ -81,11 +84,9 @@ class DiamondDifferenceCalculator1D(object):
 				self.mesh.psi[0, n] = psi_in
 				for i in range(self.mesh.nx):
 					node = self.mesh.nodes[i]
-					
-					#psi_out = node.flux_out(psi_in, n, g, k)
 					q = 0.5*self.fission_source[i]/k + 0.5*self.scatter_source[i]
-					psi_out = psi_in*(2*mu - node.dx*node.sigma_tr) + 2*node.dx*q
-					psi_out /= 2*mu + node.dx*node.sigma_tr
+					psi_out = psi_in*(2*mu - node.dx*node.sigma_tr[g]) + 2*node.dx*q
+					psi_out /= 2*mu + node.dx*node.sigma_tr[g]
 					
 					self.mesh.psi[i+1, n] = psi_out
 					psi_in = psi_out
@@ -95,25 +96,23 @@ class DiamondDifferenceCalculator1D(object):
 			for n in range(self.quad.N2, self.quad.N):
 				mu = abs(self.quad.mus[n])
 				psi_in = self._get_psi_right(n, g)
-				self.mesh.psi[-1, n] = psi_in
+				self.mesh.psi[-1, n, g] = psi_in
 				for i in range(self.mesh.nx):
 					node = self.mesh.nodes[-1-i]
+					q = 0.5*self.fission_source[i, g]/k + 0.5*self.scatter_source[i, g]
+					psi_out = psi_in*(2*mu - node.dx*node.sigma_tr[g]) + 2*node.dx*q
+					psi_out /= 2*mu + node.dx*node.sigma_tr[g]
 					
-					#psi_out = node.flux_out(psi_in, n, g, k)
-					q = 0.5*self.fission_source[i]/k + 0.5*self.scatter_source[i]
-					psi_out = psi_in*(2*mu - node.dx*node.sigma_tr) + 2*node.dx*q
-					psi_out /= 2*mu + node.dx*node.sigma_tr
-					
-					self.mesh.psi[-2-i, n] = psi_out
+					self.mesh.psi[-2-i, n, g] = psi_out
 					psi_in = psi_out
-			# debug
-			#for n in range(self.quad.N):
-			#	self.mesh.psi[0, n] = self._get_psi_left(n, g)
+				
+				# Reconnect that last pesky boundary flux
+				self.mesh.psi[0, n, g] = psi_out
 				
 			# Update the scalar flux using the Diamond Difference approximation
 			#
 			# Interior nodes
-			for i in range(1, self.mesh.nx - 1):
+			for i in range(self.mesh.nx):
 				flux_i = 0.0
 				for n in range(self.quad.N):
 					w = self.quad.weights[n]
@@ -122,17 +121,6 @@ class DiamondDifferenceCalculator1D(object):
 					flux_i += w*(psi_plus + psi_minus)/2.0
 				self.mesh.flux[i, g] = flux_i
 		
-			# Boundary nodes
-			flux_left = 0.0
-			flux_right = 0.0
-			for n in range(self.quad.N):
-				w = self.quad.weights[n]
-				flux_left += w*(self.mesh.psi[0, n, g] + self._get_psi_left(n, g))/2.0
-				flux_right += w*(self.mesh.psi[-1, n, g] + self._get_psi_right(n, g))/2.0
-			self.mesh.flux[0, g] = flux_left
-			self.mesh.flux[-1, g] = flux_right
-			
-		#self.mesh.update_nodal_fluxes()
 		
 		# Get the fission source and flux differences
 		fluxdiff = 0.0
@@ -189,6 +177,15 @@ class DiamondDifferenceCalculator1D(object):
 					errstr = "Solution did NOT converge after {} inner iterations; aborting."
 					warn(errstr.format(inner_count))
 					return False
+				
+				# TODO: Figure out if this is the right place to put the acceleration method
+				if self.accelerator:
+					# Update the accleration method with the fine mesh fluxes
+					self.accelerator.restrict(self.mesh)
+					# Converge the acceleration flux
+					print("Coarse mesh iterations would go here.")
+					# Update our fine mesh solution from the coarse mesh
+					self.accelerator.prolong(self.mesh)
 				
 				#print("Inner Iter {}: flux, rms = {}".format(inner_count, fluxdiff))
 				#print(self.mesh.flux)
