@@ -105,10 +105,9 @@ class DiamondDifferenceCalculator1D(object):
 					
 					self.mesh.psi[-2-i, n, g] = psi_out
 					psi_in = psi_out
-			# debug
-			for n in range(self.quad.N):
-				print(psi_out)
-				self.mesh.psi[0, n, g] = psi_out#self._get_psi_left(n, g)
+				
+				# Reconnect that last pesky boundary flux
+				self.mesh.psi[0, n, g] = psi_out
 				
 			# Update the scalar flux using the Diamond Difference approximation
 			#
@@ -122,19 +121,6 @@ class DiamondDifferenceCalculator1D(object):
 					flux_i += w*(psi_plus + psi_minus)/2.0
 				self.mesh.flux[i, g] = flux_i
 		
-			'''
-			# Boundary nodes
-			flux_left = 0.0
-			flux_right = 0.0
-			for n in range(self.quad.N):
-				w = self.quad.weights[n]
-				flux_left += w*(self.mesh.psi[0, n, g] + self._get_psi_left(n, g))/2.0
-				flux_right += w*(self.mesh.psi[-1, n, g] + self._get_psi_right(n, g))/2.0
-			self.mesh.flux[0, g] = flux_left
-			self.mesh.flux[-1, g] = flux_right
-			'''
-			
-		#self.mesh.update_nodal_fluxes()
 		
 		# Get the fission source and flux differences
 		fluxdiff = 0.0

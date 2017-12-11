@@ -32,7 +32,6 @@ elif G == 2:
 	mg["fuel"]["D"] = fuel_diffusion
 	mg["fuel"]["transport"] = 1/(3*fuel_diffusion)
 	mg["fuel"]["absorption"] = np.array([0.0088, 0.0852]) # 3%
-	#mg["fuel"]["absorption"] = np.array([0.0079, 0.0605])  # 1%
 	mg["fuel"]["nu-fission"] = np.array([0.0062, 0.1249])
 	
 	s12 = 0.0188
@@ -41,7 +40,6 @@ elif G == 2:
 	s22 = scatter[1]
 	fuel_scatter_matrix = np.array([[s11,    0],
 	                                [s12,  s22]])
-	print(fuel_scatter_matrix, fuel_scatter_matrix.T)
 	mg["fuel"]["nu-scatter"] = fuel_scatter_matrix
 	
 	
