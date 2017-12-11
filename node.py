@@ -1,8 +1,6 @@
 # Node
 #
 # Classes and methods for discrete ordinate nodes
-#
-# FIXME: Multigroup is simply a placeholder. Energy groups are purely independent and don't do anything.
 
 import numpy as np
 
@@ -18,7 +16,7 @@ def _group_cross_sections_from_dict(cross_sections, groups):
 	sigma_a:            float, cm^-1; "absorption" xs
 	sigma_s:            float, cm^-1; "scatter" xs
 	nu_sigma_f:         float, cm^-1; "nu-fission" xs
-	sigma_t:            float, cm^-1;  total xs
+	sigma_tr:           float, cm^-1;  transport xs
 	"""
 	sigma_a = np.zeros(groups)
 	sigma_s = np.zeros(groups)
@@ -36,13 +34,17 @@ def _group_cross_sections_from_dict(cross_sections, groups):
 		nu_sigma_f = cross_sections["nu-fission"]
 	if "chi" in cross_sections:
 		chi = cross_sections["chi"]
+	elif nu_sigma_f.any():
+		chi[0] = 1.0
+	if "transport" in cross_sections:
+		sigma_tr = cross_sections["transport"]
 	else:
-		chi[-1] = 1.0
-	if "total" in cross_sections:
-		sigma_t = cross_sections["total"]
-	else:
-		sigma_t = sigma_a + sigma_s
-	return sigma_a, sigma_s, scatter_matrix, nu_sigma_f, chi, sigma_t
+		print("Warning: Transport cross section unavailable; using Total.")
+		if "total" in cross_sections:
+			sigma_tr = cross_sections["total"]
+		else:
+			sigma_tr = sigma_a + sigma_s
+	return sigma_a, sigma_s, scatter_matrix, nu_sigma_f, chi, sigma_tr
 
 
 class Node1D(object):
@@ -68,10 +70,10 @@ class Node1D(object):
 	sigma_a
 	nu_sigma_f (not implemented yet)
 	sigma_s
-	sigma_t
+	sigma_tr
 	flux:               scalar flux in the node per energy group
 	"""
-	def __init__(self, dx, quad, cross_sections, source=0.0, groups=1, name=""):
+	def __init__(self, dx, quad, cross_sections, groups, source=0.0, name=""):
 		self.dx = dx
 		self.quad = quad
 		self._source = source
@@ -79,15 +81,19 @@ class Node1D(object):
 		self.name = name
 		
 		self.sigma_a, self.sigma_s, self.scatter_matrix,\
-		self.nu_sigma_f, self.chi, self.sigma_t = \
+		self.nu_sigma_f, self.chi, self.sigma_tr = \
 			_group_cross_sections_from_dict(cross_sections, groups)
 		
+		# node.flux should be deprecated
+		'''
 		self.flux = np.zeros(groups)
 		for g in range(groups):
-			if self.sigma_t[g] < self.sigma_s[g]:
-				self.flux[g] = source/(self.sigma_t[g] - self.sigma_s[g])
+			if self.sigma_tr[g] < self.sigma_s[g]:
+				self.flux[g] = source/(self.sigma_tr[g] - self.sigma_s[g])
 			else:
 				self.flux[g] = source
+		'''
+		self.flux = None
 		
 		# Precalcuate a commonly-used term
 		N = self.quad.N
@@ -96,7 +102,7 @@ class Node1D(object):
 		for n in range(N):
 			two_mu = 2*abs(self.quad.mus[n])
 			for g in range(groups):
-				prod = dx*self.sigma_t[g]
+				prod = dx*self.sigma_tr[g]
 				self._flux_coeffs[n, g] = two_mu - prod
 				self._flux_denoms[n, g] = two_mu + prod
 	
@@ -105,11 +111,15 @@ class Node1D(object):
 Node: {self.name}
 	Sigma_s:  {self.sigma_s} cm^-1
 	Sigma_a:  {self.sigma_a} cm^-1
-	Sigma_t:  {self.sigma_t} cm^-1
+	Sigma_tr: {self.sigma_tr} cm^-1
+	nuSigmaF: {self.nu_sigma_f} cm^-1
 	dx:       {self.dx} cm
 		""".format(**locals())
 		return rep
 	
+	# All the node methods have been deprecated
+	# in favor of vector operations at the mesh level
+	'''
 	def _get_source(self, g, k):
 		"""Get the average nodal source, which is not to be confused with
 		the the external source.
@@ -128,15 +138,16 @@ Node: {self.name}
 		# maybe scattering source is what's screwing up ther problem?
 		#scatter = 0
 		scatter = (self.scatter_matrix*self.flux)[g]
-		'''
+		"""
 		# TODO: Check whether this is correct
 		if self.scatter_matrix:
 			scatter = (self.scatter_matrix*self.flux)[g]
 		else:
 			scatter = self.sigma_s[g]*self.flux[g]
-		'''
+		"""
 		qbar = 0.5*(scatter + fission + self._source)
 		return qbar
+	
 	
 	def get_fission_source(self, g, k):
 		fission = 0.0
@@ -173,7 +184,8 @@ Node: {self.name}
 		qbar = self._get_source(g, k)
 		flux_out = (flux_in*coeff + 2*self.dx*qbar)/denom
 		return flux_out
-		
+		'''
+
 # test
 if __name__ == "__main__":
 	import quadrature
