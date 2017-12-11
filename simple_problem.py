@@ -14,12 +14,6 @@ from numpy import array
 FIXED_SOURCE = 1.0  # TODO: scale by 1, 2, 4pi?
 
 
-# Define the nuclides
-# (Irrelevant, because manually overwritten below)
-u238 = material.Nuclide(238, {"scatter": 10.0})
-h1 = material.Nuclide(1, {"scatter"   : 1.0,
-                          "absorption": 1.0})
-
 # Define the constituent materials
 fuel_mat = material.Material(groups=1)
 fuel_mat.macro_xs = {'scatter': array([1.0]),
