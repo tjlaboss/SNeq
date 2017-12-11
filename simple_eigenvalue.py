@@ -42,7 +42,6 @@ elif G == 2:
 	                                [s12,  s22]])
 	mg["fuel"]["nu-scatter"] = fuel_scatter_matrix
 	
-	
 	# Water reflector
 	mod_diffusion = np.array([1.55, 0.27])
 	mg["mod"]["D"] = mod_diffusion
@@ -66,10 +65,12 @@ mod_mat.macro_xs = mg["mod"]
 fuel_mat = material.Material(name="Fuel, 3.1%", groups=G)
 fuel_mat.macro_xs = mg["fuel"]
 
+
 if G == 1:
 	# debug
-	fuel_mat.macro_xs["nu-fission"] = 2.1*fuel_mat.macro_xs["absorption"] # debug; force kinf to 2.1
+	fuel_mat.macro_xs["nu-fission"] = 1.1*fuel_mat.macro_xs["absorption"] # debug; force kinf to 2.1
 	fuel_mat.macro_xs["total"] = fuel_mat.macro_xs["transport"]
+	fuel_mat.macro_xs["nu-scatter"] = fuel_mat.macro_xs["total"] - fuel_mat.macro_xs["absorption"]
 	# analytically calculate kinf from the 1-group xs
 	kinf = float(mg["fuel"]["nu-fission"]/mg["fuel"]["absorption"])
 elif G == 2:
@@ -83,15 +84,14 @@ elif G == 2:
 	sigma_s12 = f2["nu-scatter"][1, 0] - f2["nu-scatter"][0, 1]
 	numer = f2["nu-fission"][0] + (sigma_s12/f2["absorption"][1])*f2["nu-fission"][1]
 	denom = sigma_s12 + f2["absorption"][0]
-	#kinf = (f2["nu-fission"][0] + (sigma_s12/f2["absorption"][1])*f2["nu-fission"][1]) / (f2["absorption"][0] + sigma_s12)
 	kinf = numer/denom
 
 print("kinf = {:1.5f}".format(kinf))
 
 
 # Cell dimensions
-PITCH = 0.6  # cm; pin pitch
-WIDTH = 0.4  # cm; length of one side of the square fuel pin
+PITCH = 20   # cm; pin pitch
+WIDTH = 10   # cm; length of one side of the square fuel pin
 
 
 class Pincell1D(mesh.Mesh1D):
@@ -167,20 +167,7 @@ Indices:
 		Edit: just expanded to 2-group
 		"""
 		fs = np.zeros((self.nx, self.groups))
-		'''
-		for i in range(self.nx):
-			node = self.nodes[i]
-			if node.nu_sigma_f.any():
-				if node.chi.any():
-					chi = node.chi
-				else:
-					chi = np.zeros(self.groups)
-					chi[0] = 1.0
-				fs[i, :] = chi*self.flux[i, :]*node.nu_sigma_f
-			else:
-				fs[i, :] = 0.0
-		'''
-		# DEBUG; a messier fission source calculation just in case
+		# DEBUG--clean up this fission source iteration
 		for i in range(self.nx):
 			node = self.nodes[i]
 			for g in range(self.groups):
@@ -197,22 +184,9 @@ Indices:
 		Edit: just expanded him to multigroup too
 		"""
 		ss = np.zeros((self.nx, self.groups))
-		#'''
 		for i in range(self.nx):
 			phi_vector = self.flux[i]
 			ss[i] = self.nodes[i].scatter_matrix.dot(phi_vector)
-		'''
-		# DEBUG; a messier scattering source calculation
-		for i in range(self.nx):
-			node = self.nodes[i]
-			if G > 1:
-				for g in range(self.groups):
-					for gp in range(self.groups):
-						phi = self.flux[i, gp]
-						ss[i, g] += phi*node.scatter_matrix[g, gp]
-			else:
-				ss[i] = self.flux[i]*node.scatter_matrix
-		'''
 		return ss
 	
 	def _populate(self):
@@ -338,10 +312,9 @@ class RebalancePincell1D(Pincell1D):
 # test fine mesh
 s2 = quadrature.GaussLegendreQuadrature(2)
 NXMOD = 0
-NXFUEL = 8
+NXFUEL = 10
 KGUESS = kinf
 cell = Pincell1D(s2, mod_mat, fuel_mat, nx_mod=NXMOD, nx_fuel=NXFUEL, groups=G)
-
 solver = calculator.DiamondDifferenceCalculator1D(s2, cell, ("reflective", "reflective"), kguess=KGUESS)
 solver.transport_sweep(KGUESS)
 
