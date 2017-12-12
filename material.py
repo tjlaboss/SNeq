@@ -53,7 +53,7 @@ class Material(object):
 		self.groups = groups
 		self.name = name
 		if macro_xs is not None:
-			self.sigma_a, self.scatter_matrix, self.nu_sigma_f, \
+			self.sigma_a, self.sigma_r, self.scatter_matrix, self.nu_sigma_f, \
 				self.chi, self.sigma_tr, self.D = \
 				self._group_cross_sections_from_dict(macro_xs)
 	
@@ -87,6 +87,8 @@ class Material(object):
 			scatter_matrix = macro_xs["nu-scatter"].squeeze()
 		elif "scatter" in macro_xs:
 			scatter_matrix = macro_xs["scatter"]
+		total_scatter = scatter_matrix.sum(axis=0)
+		selfscatter = scatter_matrix.diagonal()
 		if "nu-fission" in macro_xs:
 			nu_sigma_f = macro_xs["nu-fission"]
 		if "chi" in macro_xs:
@@ -104,8 +106,9 @@ class Material(object):
 			if "total" in macro_xs:
 				sigma_tr = macro_xs["total"]
 			else:
-				sigma_tr = sigma_a  + scatter_matrix.sum(axis=0)
-		return sigma_a, scatter_matrix, nu_sigma_f, chi, sigma_tr, D
+				sigma_tr = sigma_a + total_scatter
+		sigma_r = sigma_a + total_scatter - selfscatter
+		return sigma_a, sigma_r, scatter_matrix, nu_sigma_f, chi, sigma_tr, D
 	
 	def fromNuclides(self, nuclides, density, name=""):
 		"""Generate a Material object from a list of nuclides.

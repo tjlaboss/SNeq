@@ -1,5 +1,6 @@
 # Matrix builder
 
+from numpy import array
 
 def interior_node(ma, mb, mc, dxa, dxb, dxc, g):
 	"""Return the three terms for an interior interface node
@@ -21,13 +22,13 @@ def interior_node(ma, mb, mc, dxa, dxb, dxc, g):
 	Dcb = 2*mc.D[g]*mb.D[g]/(mc.D[g]*dxb + mb.D[g]*dxc)
 	left = -Dab
 	right = -Dcb
-	center = Dab + Dcb + (mb.sigma_s12[g] + mb.sigma_a[g])*dxb
+	center = Dab + Dcb + mb.sigma_r[g]*dxb
 	if g == 0:
 		sourcefrom1 = mb.nu_sigma_f[0]*dxb
 		sourcefrom2 = mb.nu_sigma_f[1]*dxb
 	else:
-		sourcefrom1 = mb.sigma_s12[0]*dxb
-		sourcefrom2 = 0
+		sourcefrom1 = mb.scatter_matrix[1, 0]*dxb
+		sourcefrom2 = mb.scatter_matrix[0, 1]*dxb
 	
 	return [left, center, right], [sourcefrom1, sourcefrom2]
  
@@ -46,12 +47,14 @@ def reflective(m, dx, g):
 	"""
 	assert g in range(2), "g must be 0 (fast) or 1 (thermal)"
 	edge = -2*m.D[g]/dx
-	center = 2*m.D[g]/dx + (m.sigma_s12[g] + m.sigma_a[g])*dx
+	center = 2*m.D[g]/dx + m.sigma_r[g]*dx
 	if g == 0:
 		sourcefrom1 = m.nu_sigma_f[0]*dx
 		sourcefrom2 = m.nu_sigma_f[1]*dx
 	else:
-		sourcefrom1 = m.sigma_s12[0]*dx
-		sourcefrom2 = 0
+		sourcefrom1 = m.scatter_matrix[1, 0]*dx
+		sourcefrom2 = m.scatter_matrix[0, 1]*dx
+		#xvec = array([dx, dx])
+		#sourcefrom1, sourcefrom2 = m.scatter_matrix.dot(xvec)
 	
 	return [center, edge], [sourcefrom1, sourcefrom2]

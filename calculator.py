@@ -30,6 +30,18 @@ class DiamondDifferenceCalculator1D(object):
 		self._get_psi_left, self._get_psi_right = self.__set_bcs(bcs)
 	
 	
+	def _l2norm(self, mg_new, mg_old):
+		diff = 0.0
+		for i in range(self.mesh.nx):
+			for g in range(self.mesh.groups):
+				# Calculate the fission source difference
+				mg0 = mg_old[i, g]
+				mg1 = mg_new[i, g]
+				if mg1 != mg0:
+					diff += ((mg1 - mg0)/mg1)**2
+		return np.sqrt(diff/self.mesh.nx)
+		
+	
 	def __set_bcs(self, bcs):
 		for bc in bcs:
 			assert bc in BOUNDARY_CONDITIONS, \
@@ -168,9 +180,31 @@ class DiamondDifferenceCalculator1D(object):
 			inner_count = 0
 			fluxdiff = eps + 1
 			while fluxdiff > eps:
+				
+				# TODO: Figure out if this is the right place to put the acceleration method
+				if self.accelerator:
+					print("Flux before acceleration:")
+					print(self.mesh.flux)
+					
+					old_flux = np.array(self.mesh.flux)
+					# Update the accleration method with the fine mesh fluxes
+					self.accelerator.restrict(self.mesh)
+					# Converge the acceleration flux
+					self.accelerator.solve(old_flux, self.fission_source, self.k, 1E-4)
+					# Update our fine mesh solution from the coarse mesh
+					coarse_flux = self.accelerator.coarse_mesh.flux
+					self.accelerator.prolong(self.mesh, coarse_flux)
+					
+					print("Flux after acceleration:")
+					print(self.mesh.flux)
+					rms_new_flux = self._l2norm(self.mesh.flux, old_flux)
+					print("RMS (CMFD): ", rms_new_flux)
+				
+				
 				fs, fsdiff, fluxdiff = self.transport_sweep(self.k)
 				# Inner: converge the flux
 				# Find the relative difference in flux using the L2 engineering norm
+				print("RMS (Transport): ", fluxdiff)
 				
 				inner_count += 1
 				if inner_count >= maxiter:
@@ -178,17 +212,6 @@ class DiamondDifferenceCalculator1D(object):
 					warn(errstr.format(inner_count))
 					return False
 				
-				# TODO: Figure out if this is the right place to put the acceleration method
-				if self.accelerator:
-					# Update the accleration method with the fine mesh fluxes
-					self.accelerator.restrict(self.mesh)
-					# Converge the acceleration flux
-					self.accelerator.solve(eps)
-					# Update our fine mesh solution from the coarse mesh
-					self.accelerator.prolong(self.mesh)
-				
-				#print("Inner Iter {}: flux, rms = {}".format(inner_count, fluxdiff))
-				#print(self.mesh.flux)
 			
 			print("Outer Iteration {}: flux converged at kguess = {}".format(inner_count, self.k))
 			print(self.mesh.flux)

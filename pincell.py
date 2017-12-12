@@ -30,6 +30,8 @@ class Pincell1D(mesh.Mesh1D):
 		self.mod = mod
 		assert groups == fuel.groups == mod.groups, \
 			"Unequal number of energy groups in problem and materials."
+		self.pitch = pitch
+		self.width = width
 		self.nx_mod = nx_mod
 		self.nx_fuel = nx_fuel
 		self.fuel_xwidth = width
@@ -41,13 +43,15 @@ class Pincell1D(mesh.Mesh1D):
 		self.fuel_lim1 = self.nx_mod + self.nx_fuel - 1
 		self.mod1_lim0 = self.nx_mod + self.nx_fuel
 		self.mod1_lim1 = self.nx - 1
+		
+		self.dxs = np.empty(self.nx)
 		# Remove the next two lines for non-uniform meshes in each region
-		self._dx_fuel = self.fuel_xwidth/self.nx_fuel
+		self.dx_fuel = self.fuel_xwidth/self.nx_fuel
 		if self.nx_mod:
-			self._dx_mod = self.mod_xwidth/self.nx_mod
+			self.dx_mod = self.mod_xwidth/self.nx_mod
 		else:
-			self._dx_mod = 0.0
-		self._dxs = (self._dx_mod, self._dx_fuel, self._dx_mod)
+			self.dx_mod = 0.0
+		self._dx_order = (self.dx_mod, self.dx_fuel, self.dx_mod)
 		#
 		self._populate()
 	
@@ -75,7 +79,7 @@ Indices:
 	
 	def get_dx(self, i):
 		j = self.get_region(i)
-		return self._dxs[j]
+		return self._dx_order[j]
 	
 	def calculate_fission_source(self):
 		"""Get the multigroup fission source array.
@@ -107,6 +111,7 @@ Indices:
 		for i in range(self.nx):
 			region = self.get_region(i)
 			dx = self.get_dx(i)
+			self.dxs[i] = dx
 			if region == 1:
 				fuel_node = node.Node1D(dx, self.quad, self.fuel, self.source)
 				self.nodes[i] = fuel_node

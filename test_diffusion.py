@@ -54,6 +54,10 @@ for k in range(len(mattuple)):
 	# And downscatter cross section
 	m.sigma_s12 = array([s12, 0.0])
 	
+	# Removal cross section
+	outscatter = m.scatter_matrix.sum(axis=0) - m.scatter_matrix.diagonal()
+	m.sigma_r = m.sigma_a + outscatter
+	
 	# Nu-Fission
 	m.nu_sigma_f = array([data[k, 5],
 	                      data[k, 6]])
@@ -107,8 +111,8 @@ all_problems = (prob0, prob1, prob2, prob3, prob4, prob5, prob6, prob7, prob8, p
 PLOT = True
 
 
-for i, prob in enumerate(all_problems):
-#for i, prob in enumerate([prob9]):
+#for i, prob in enumerate(all_problems):
+for i, prob in enumerate([prob0]):
 	print("\n\nProblem", i, "\n")
 	for m in prob.mats:
 		print(m, "k_inf =", m.get_kinf())

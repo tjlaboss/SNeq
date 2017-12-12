@@ -5,6 +5,8 @@
 
 from pincell import Pincell1D
 from cmr import RebalancePincell1D
+from cmfd import FiniteDifferencePincell1D
+import accelerator
 import quadrature
 import material
 import calculator
@@ -20,7 +22,7 @@ PITCH = 20   # cm; pin pitch
 WIDTH = 10   # cm; length of one side of the square fuel pin
 NXMOD = 0
 NXFUEL = 10
-
+BOUNDARIES = ("reflective", "reflective")
 
 
 # Load the cross sections from disk
@@ -84,8 +86,7 @@ print("kinf = {:1.5f}".format(kinf))
 s2 = quadrature.GaussLegendreQuadrature(2)
 KGUESS = kinf
 cell = Pincell1D(s2, mod_mat, fuel_mat, PITCH, WIDTH, NXMOD, NXFUEL, groups=G)
-solver = calculator.DiamondDifferenceCalculator1D(s2, cell, ("reflective", "reflective"), kguess=KGUESS)
-solver.transport_sweep(KGUESS)
+coarse_mesh = None
 
 '''
 # test CMR
@@ -99,6 +100,14 @@ coarse_mesh.prolong_flux(cell, new_flux)
 
 raise SystemExit
 '''
+
+# test CMFD
+coarse_mesh = FiniteDifferencePincell1D().fromFineMesh(cell, 2)
+cmfd = accelerator.FiniteDifference1D(coarse_mesh, BOUNDARIES)
+
+solver = calculator.DiamondDifferenceCalculator1D(s2, cell, BOUNDARIES,
+                                                  accelerator=cmfd, kguess=KGUESS)
+solver.transport_sweep(KGUESS)
 
 converged = solver.solve(eps=1E-6, maxiter=200)
 phi = solver.mesh.flux

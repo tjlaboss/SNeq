@@ -89,7 +89,6 @@ def make_matrix(prob, G=2):
 				raise ValueError("This function works for 2 groups only, got " + str(G))
 		else:
 			raise NotImplementedError(prob.bcs)
-			# vacuum, left edge
 			(l, c, r), slist = nodes.interior_node(ms[0], ms[1], ms[2], dxs[0], dxs[1], dxs[2], g)
 			L[0, 1, g] = r
 			L[0, 0, g] = c/(1 + 4*ms[0].D[g]/dxs[0])
@@ -128,7 +127,6 @@ def make_matrix(prob, G=2):
 				raise ValueError("This function works for 2 groups only, got " + str(G))
 		else:
 			raise NotImplementedError(prob.bcs)
-			# vacuum, right edge
 			(l, c, r), slist = nodes.interior_node(ms[-3], ms[-2], ms[-1], dxs[-3], dxs[-2], dxs[-1], g)
 			L[n, n - 1, g] = l
 			L[n, n, g] = c/(1 + 4*ms[-1].D[g]/dxs[-1])
@@ -175,20 +173,27 @@ def _gauss_seidel(L, U, s, x, k):
 	return x
 
 
-def python_gauss_iterator(m, A, b):
+def python_gauss_iterator(m, A, b,
+                          eps_outer, eps_inner,
+                          x=None, sguess=None, kguess=1.1):
 	n = m*2
-	kguess = 1.1
-	x = ones((n, 1))/n
+	if x is None:
+		x = ones((n, 1))/n
+	else:
+		x.shape = (n, 1)
 	l = tril(A)
 	u = A - l
 	
 	# Guess the fission source.
-	sguess = b.dot(x)
+	if sguess is None:
+		sguess = b.dot(x)
+	else:
+		sguess.shape = (n, 1)
 	
 	fsdiff = 1
 	kdiff = 1
 	c = 0
-	while ((fsdiff > 1E-5) or (kdiff > 1E-5)) and (c < MAXOUTER):
+	while ((fsdiff > eps_outer) or (kdiff > eps_outer)) and (c < MAXOUTER):
 	#for z in range(50):
 		fsdiff = 0
 		oldx = x[:]
@@ -197,7 +202,7 @@ def python_gauss_iterator(m, A, b):
 		# Converge flux at source term.
 		fluxdiff = 1
 		d = 0
-		while fluxdiff > 1E-7 and (d < MAXINNER):
+		while fluxdiff > eps_inner and (d < MAXINNER):
 			fluxdiff = 0
 			d+=1
 			
@@ -232,19 +237,15 @@ def python_gauss_iterator(m, A, b):
 		fsdiff = sqrt(fsdiff/m)
 		sguess = s[:]
 	
-	print("Python converged after", c, "fission source iterations.")
+	print("CMFD converged after", c, "fission source iterations.")
 	
 	print("Python k = ", kguess)
-	
-	#mat = prob.mats[0]
-	#fissions = mat.nuSigma_f[1]*x[:m] +mat.nuSigma_f[2]*x[m:]
-	#absorpts =mat.Sigma_a[1]*x[:m] +mat.Sigma_a[2]*x[m:]
-	# print(sum(fissions)/sum(absorpts))
 	
 	return x, s, k
 
 
-def solve_problem(prob, plot = False, prob_num = None):
+def solve_problem(prob, fluxguess=None, fsguess=None, kguess=None,
+                  eps_outer=1E-5, eps_inner=1E-7, plot=False):
 	"""Solve one of the 10 reactor physics problems
 	
 	Inputs:
@@ -272,6 +273,7 @@ def solve_problem(prob, plot = False, prob_num = None):
 	matB[:m, :m] = b[:, :, 0]
 	matB[:m, m:] = b[:, :, 1]
 	
+	'''
 	# Spy: check on the matrix shapes
 	#plt.figure(); plt.spy(matA); plt.title("[A] matrix"); plt.show()
 	#plt.figure(); plt.spy(matB); plt.title("[B] matrix"); plt.show()
@@ -291,6 +293,9 @@ def solve_problem(prob, plot = False, prob_num = None):
 			# We're in a peak
 			xpeaks.append(float(prob.distance(i)))
 	print("Fission Source peaking of {:.3} occurs at: {:3.4} cm".format(sm, *xpeaks))
+	'''
+	return python_gauss_iterator(m, matA, matB, eps_outer, eps_inner,
+	                             x=fluxguess, sguess=fsguess, kguess=kguess)
 	
 	
 	if plot:
