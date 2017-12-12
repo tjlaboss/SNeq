@@ -59,33 +59,19 @@ elif G == 2:
 else:
 	raise NotImplementedError("{} groups".format(G))
 
-mod_mat = material.Material(name="Moderator", groups=G)
-mod_mat.macro_xs = mg["mod"]
+mod_mat = material.Material(name="Moderator", macro_xs=mg["mod"], groups=G)
 
-fuel_mat = material.Material(name="Fuel, 3.1%", groups=G)
-fuel_mat.macro_xs = mg["fuel"]
-
+fuel_mat = material.Material(name="Fuel, 3.1%", macro_xs=mg["fuel"], groups=G)
 
 if G == 1:
 	# debug
-	fuel_mat.macro_xs["nu-fission"] = 1.1*fuel_mat.macro_xs["absorption"] # debug; force kinf to 2.1
-	fuel_mat.macro_xs["total"] = fuel_mat.macro_xs["transport"]
-	fuel_mat.macro_xs["nu-scatter"] = fuel_mat.macro_xs["total"] - fuel_mat.macro_xs["absorption"]
+	fuel_mat.nu_sigma_f = 1.1*fuel_mat.sigma_a # debug; force kinf to 2.1
+	#fuel_mat.sigma_tr = mg["fuel"]["transport"]
+	fuel_mat.scatter_matrix = fuel_mat.sigma_tr - fuel_mat.sigma_a
 	# analytically calculate kinf from the 1-group xs
-	kinf = float(mg["fuel"]["nu-fission"]/mg["fuel"]["absorption"])
-elif G == 2:
-	# fudge the numbers for testing
-	'''
-	mg["fuel"]["nu-fission"][:] = 2.2*mg["fuel"]["absorption"][:]  # debug: force kinf to 2.2
-	mg["fuel"]["nu-scatter"][0, 1] = 0.0 # no upscatter
-	mg["mod"]["nu-scatter"][0, 1] = 0.0  # no upscatter
-	'''
-	f2 = mg["fuel"]
-	sigma_s12 = f2["nu-scatter"][1, 0] - f2["nu-scatter"][0, 1]
-	numer = f2["nu-fission"][0] + (sigma_s12/f2["absorption"][1])*f2["nu-fission"][1]
-	denom = sigma_s12 + f2["absorption"][0]
-	kinf = numer/denom
 
+
+kinf = fuel_mat.get_kinf()
 print("kinf = {:1.5f}".format(kinf))
 
 
@@ -194,11 +180,10 @@ Indices:
 			region = self.get_region(i)
 			dx = self.get_dx(i)
 			if region == 1:
-				fuel_node = node.Node1D(dx, self.quad, self.fuel.macro_xs, self.groups,
-				                        source=FIXED_SOURCE)
+				fuel_node = node.Node1D(dx, self.quad, self.fuel, FIXED_SOURCE)
 				self.nodes[i] = fuel_node
 			else:
-				mod_node = node.Node1D(dx, self.quad, self.mod.macro_xs, self.groups)
+				mod_node = node.Node1D(dx, self.quad, self.mod)
 				self.nodes[i] = mod_node
 
 
@@ -303,8 +288,6 @@ class RebalancePincell1D(Pincell1D):
 			fi = factors[cmi]
 			for g in range(self.groups):
 				fine_mesh.flux[i, g] *= fi[g]
-				# TODO: Confirm whether the angular flux should be likewise updated
-				fine_mesh.psi[i, :, g] *= fi[g]
 		self.flux = coarse_flux
 		
 	
@@ -318,6 +301,7 @@ cell = Pincell1D(s2, mod_mat, fuel_mat, nx_mod=NXMOD, nx_fuel=NXFUEL, groups=G)
 solver = calculator.DiamondDifferenceCalculator1D(s2, cell, ("reflective", "reflective"), kguess=KGUESS)
 solver.transport_sweep(KGUESS)
 
+'''
 # test CMR
 coarse_mesh = RebalancePincell1D().fromFineMesh(cell, 2)
 coarse_mesh.restrict_flux(cell)
@@ -328,6 +312,7 @@ new_flux[:, 1] = 0.5*coarsine
 coarse_mesh.prolong_flux(cell, new_flux)
 
 raise SystemExit
+'''
 
 converged = solver.solve(eps=1E-6, maxiter=200)
 phi = solver.mesh.flux

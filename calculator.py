@@ -183,7 +183,7 @@ class DiamondDifferenceCalculator1D(object):
 					# Update the accleration method with the fine mesh fluxes
 					self.accelerator.restrict(self.mesh)
 					# Converge the acceleration flux
-					print("Coarse mesh iterations would go here.")
+					self.accelerator.solve(eps)
 					# Update our fine mesh solution from the coarse mesh
 					self.accelerator.prolong(self.mesh)
 				

@@ -4,48 +4,6 @@
 
 import numpy as np
 
-def _group_cross_sections_from_dict(cross_sections, groups):
-	"""Read cross sections from a dictionary.
-	
-	Parameter:
-	----------
-	cross_sections:     dict of {"reaction" : macro_xs}
-	
-	Returns:
-	--------
-	sigma_a:            float, cm^-1; "absorption" xs
-	sigma_s:            float, cm^-1; "scatter" xs
-	nu_sigma_f:         float, cm^-1; "nu-fission" xs
-	sigma_tr:           float, cm^-1;  transport xs
-	"""
-	sigma_a = np.zeros(groups)
-	sigma_s = np.zeros(groups)
-	scatter_matrix = np.zeros((groups, groups))
-	nu_sigma_f = np.zeros(groups)
-	chi = np.zeros(groups)
-	
-	if "absorption" in cross_sections:
-		sigma_a = cross_sections["absorption"]
-	if "scatter" in cross_sections:
-		sigma_s = cross_sections["scatter"]
-	if "nu-scatter" in cross_sections:
-		scatter_matrix = cross_sections["nu-scatter"].squeeze()
-	if "nu-fission" in cross_sections:
-		nu_sigma_f = cross_sections["nu-fission"]
-	if "chi" in cross_sections:
-		chi = cross_sections["chi"]
-	elif nu_sigma_f.any():
-		chi[0] = 1.0
-	if "transport" in cross_sections:
-		sigma_tr = cross_sections["transport"]
-	else:
-		print("Warning: Transport cross section unavailable; using Total.")
-		if "total" in cross_sections:
-			sigma_tr = cross_sections["total"]
-		else:
-			sigma_tr = sigma_a + sigma_s
-	return sigma_a, sigma_s, scatter_matrix, nu_sigma_f, chi, sigma_tr
-
 
 class Node1D(object):
 	"""One-group, 1-D material node with constant properties
@@ -73,27 +31,19 @@ class Node1D(object):
 	sigma_tr
 	flux:               scalar flux in the node per energy group
 	"""
-	def __init__(self, dx, quad, cross_sections, groups, source=0.0, name=""):
+	def __init__(self, dx, quad, material, source=0.0, name=""):
 		self.dx = dx
 		self.quad = quad
 		self._source = source
-		self._groups = groups
 		self.name = name
 		
-		self.sigma_a, self.sigma_s, self.scatter_matrix,\
-		self.nu_sigma_f, self.chi, self.sigma_tr = \
-			_group_cross_sections_from_dict(cross_sections, groups)
+		groups = material.groups
+		self.sigma_a = material.sigma_a
+		self.scatter_matrix = material.scatter_matrix
+		self.nu_sigma_f = material.nu_sigma_f
+		self.chi = material.chi
+		self.sigma_tr = material.sigma_tr
 		
-		# node.flux should be deprecated
-		'''
-		self.flux = np.zeros(groups)
-		for g in range(groups):
-			if self.sigma_tr[g] < self.sigma_s[g]:
-				self.flux[g] = source/(self.sigma_tr[g] - self.sigma_s[g])
-			else:
-				self.flux[g] = source
-		'''
-		self.flux = None
 		
 		# Precalcuate a commonly-used term
 		N = self.quad.N
@@ -116,75 +66,7 @@ Node: {self.name}
 	dx:       {self.dx} cm
 		""".format(**locals())
 		return rep
-	
-	# All the node methods have been deprecated
-	# in favor of vector operations at the mesh level
-	'''
-	def _get_source(self, g, k):
-		"""Get the average nodal source, which is not to be confused with
-		the the external source.
-		
-		Should now include fission source and scattering sources
-		
-		Parameters:
-		-----------
-		g:          int; index of the energy group
-		k:          float; eigenvalue
-		"""
-		# If no chi distribution is given, put all of the fission source
-		# into the fastest group
-		fission = self.get_fission_source(g, k)
-		# Evaluate the scatter matrix
-		# maybe scattering source is what's screwing up ther problem?
-		#scatter = 0
-		scatter = (self.scatter_matrix*self.flux)[g]
-		"""
-		# TODO: Check whether this is correct
-		if self.scatter_matrix:
-			scatter = (self.scatter_matrix*self.flux)[g]
-		else:
-			scatter = self.sigma_s[g]*self.flux[g]
-		"""
-		qbar = 0.5*(scatter + fission + self._source)
-		return qbar
-	
-	
-	def get_fission_source(self, g, k):
-		fission = 0.0
-		if self.nu_sigma_f:
-			for gp in range(self._groups):
-				if not self.chi:
-					if g == self._groups - 1:
-						fission += self.flux[gp]*self.nu_sigma_f[gp]
-				else:
-					fission += self.chi[g]*self.flux[gp]*self.nu_sigma_f[gp]
-			fission /= k
-		return fission
-	
-	def flux_out(self, flux_in, n, g, k=None):
-		"""Calculate the flux leaving the node
-		
-		Parameters:
-		-----------
-		flux_in:        float; magnitude of the angular flux entering the node.
-						(That's psi[i-1/2] in to get psi[i+1/2] out, or
-						 That's psi[i+1/2] in to get psi[i-1/2] out.)
-		n:              int; index of the discrete angle
-		g:              int; index of the energy group
-		k:              float; eigenvalue. Required if the node a
-						non-zero nu_sigma_f (fission source).
-						[Default: None]
-		
-		Returns:
-		--------
-		flux_out:   float; magnitude of the angular flux leaving the node.
-		"""
-		coeff = self._flux_coeffs[n, g]
-		denom = self._flux_denoms[n, g]
-		qbar = self._get_source(g, k)
-		flux_out = (flux_in*coeff + 2*self.dx*qbar)/denom
-		return flux_out
-		'''
+
 
 # test
 if __name__ == "__main__":

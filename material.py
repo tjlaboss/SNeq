@@ -6,6 +6,8 @@ import constants
 import numpy as np
 from copy import deepcopy
 
+
+
 class Nuclide(object):
 	"""
 	
@@ -48,9 +50,54 @@ class Material(object):
 	number_density: float; number of atoms/cm^3 * 1E-24
 	"""
 	def __init__(self, macro_xs = None, groups=None, name=""):
-		self.macro_xs = macro_xs
+		#self.macro_xs = macro_xs
 		self.groups = groups
 		self.name = name
+		if macro_xs is not None:
+			self.sigma_a, self.scatter_matrix, self.nu_sigma_f, \
+				self.chi, self.sigma_tr = \
+				self._group_cross_sections_from_dict(macro_xs)
+	
+	def _group_cross_sections_from_dict(self, macro_xs):
+		"""Read cross sections from a dictionary.
+
+		Parameter:
+		----------
+		cross_sections:     dict of {"reaction" : macro_xs}
+
+		Returns:
+		--------
+		sigma_a:            float, cm^-1; "absorption" xs
+		sigma_s:            float, cm^-1; "scatter" xs
+		nu_sigma_f:         float, cm^-1; "nu-fission" xs
+		sigma_tr:           float, cm^-1;  transport xs
+		"""
+		sigma_a = np.zeros(self.groups)
+		scatter_matrix = np.zeros((self.groups, self.groups))
+		nu_sigma_f = np.zeros(self.groups)
+		chi = np.zeros(self.groups)
+		
+		if "absorption" in macro_xs:
+			sigma_a = macro_xs["absorption"]
+		if "nu-scatter" in macro_xs:
+			scatter_matrix = macro_xs["nu-scatter"].squeeze()
+		elif "scatter" in macro_xs:
+			scatter_matrix = macro_xs["scatter"]
+		if "nu-fission" in macro_xs:
+			nu_sigma_f = macro_xs["nu-fission"]
+		if "chi" in macro_xs:
+			chi = macro_xs["chi"]
+		elif nu_sigma_f.any():
+			chi[0] = 1.0
+		if "transport" in macro_xs:
+			sigma_tr = macro_xs["transport"]
+		else:
+			print("Warning: Transport cross section unavailable; using Total.")
+			if "total" in macro_xs:
+				sigma_tr = macro_xs["total"]
+			else:
+				sigma_tr = sigma_a  + scatter_matrix.sum(axis=0)
+		return sigma_a, scatter_matrix, nu_sigma_f, chi, sigma_tr
 	
 	def fromNuclides(self, nuclides, density, name=""):
 		"""Generate a Material object from a list of nuclides.
@@ -91,6 +138,19 @@ class Material(object):
 				macro_xs[reaction][i] = mgxs[i]*number_density
 			
 		return Material(macro_xs, G, name)
+	
+	def get_kinf(self):
+		if self.groups == 1:
+			kinf = float(self.nu_sigma_f/self.sigma_a)
+		elif self.groups == 2:
+			sigma_s12 = self.scatter_matrix[1, 0] - self.scatter_matrix[0, 1]
+			numer = self.nu_sigma_f[0] + (self.nu_sigma_f[1]*sigma_s12)/self.sigma_a[1]
+			denom = sigma_s12 + self.sigma_a[0]
+			kinf = numer/denom
+		else:
+			errstr = "Unsure how to do kinf calculation for {} energy gruops."
+			raise NotImplementedError(errstr.format(self.groups))
+		return kinf
 			
 		
 # test
