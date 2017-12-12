@@ -50,13 +50,15 @@ class Material(object):
 	number_density: float; number of atoms/cm^3 * 1E-24
 	"""
 	def __init__(self, macro_xs = None, groups=None, name=""):
-		#self.macro_xs = macro_xs
 		self.groups = groups
 		self.name = name
 		if macro_xs is not None:
 			self.sigma_a, self.scatter_matrix, self.nu_sigma_f, \
-				self.chi, self.sigma_tr = \
+				self.chi, self.sigma_tr, self.D = \
 				self._group_cross_sections_from_dict(macro_xs)
+	
+	def __str__(self):
+		return self.name
 	
 	def _group_cross_sections_from_dict(self, macro_xs):
 		"""Read cross sections from a dictionary.
@@ -76,6 +78,8 @@ class Material(object):
 		scatter_matrix = np.zeros((self.groups, self.groups))
 		nu_sigma_f = np.zeros(self.groups)
 		chi = np.zeros(self.groups)
+		sigma_tr = np.zeros(self.groups)
+		D = np.zeros(self.groups)
 		
 		if "absorption" in macro_xs:
 			sigma_a = macro_xs["absorption"]
@@ -91,13 +95,17 @@ class Material(object):
 			chi[0] = 1.0
 		if "transport" in macro_xs:
 			sigma_tr = macro_xs["transport"]
+			D = 1.0/(3*sigma_tr)
+		elif "D" in macro_xs:
+			D = macro_xs["D"]
+			sigma_tr = 1.0/(3*D)
 		else:
 			print("Warning: Transport cross section unavailable; using Total.")
 			if "total" in macro_xs:
 				sigma_tr = macro_xs["total"]
 			else:
 				sigma_tr = sigma_a  + scatter_matrix.sum(axis=0)
-		return sigma_a, scatter_matrix, nu_sigma_f, chi, sigma_tr
+		return sigma_a, scatter_matrix, nu_sigma_f, chi, sigma_tr, D
 	
 	def fromNuclides(self, nuclides, density, name=""):
 		"""Generate a Material object from a list of nuclides.
