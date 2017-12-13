@@ -192,9 +192,9 @@ class DiamondDifferenceCalculator1D(object):
 					errstr = "Solution did NOT converge after {} inner iterations; aborting."
 					warn(errstr.format(inner_count))
 					return False
-				
 			
-			print("Outer Iteration {}: flux converged at kguess = {}".format(inner_count, self.k))
+			outer_count += 1
+			print("Outer Iteration {}: flux converged at kguess = {}".format(outer_count, self.k))
 			print(self.mesh.flux)
 			
 			if self.accelerator:
@@ -230,7 +230,6 @@ class DiamondDifferenceCalculator1D(object):
 			
 			print("\n\n")
 			
-			outer_count += 1
 			if outer_count >= maxiter:
 				errstr = "Solution did NOT converge after {} outer iterations; aborting."
 				warn(errstr.format(outer_count))

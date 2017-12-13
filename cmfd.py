@@ -3,7 +3,6 @@
 # Coarse Mesh Finite Difference acceleration classes
 
 from _coarse_mesh import CoarseMeshPincell1D
-import diffusion
 import numpy as np
 
 class FiniteDifferencePincell1D(CoarseMeshPincell1D):
@@ -14,6 +13,8 @@ class FiniteDifferencePincell1D(CoarseMeshPincell1D):
 		
 		if not ((quad is None) or (groups is None) or (ratio is None)):
 			super().__init__(quad, mod, fuel, pitch, width, nx_mod, nx_fuel, groups, source, ratio)
+			self._restricted_flux = None  # fine flux on coarse mesh before CMFD
+			
 
 	def fromFineMesh(self, fine_mesh, ratio):
 		"""Generate a coarse mesh for the accelerated method from
@@ -39,7 +40,17 @@ class FiniteDifferencePincell1D(CoarseMeshPincell1D):
 		return cm
 	
 	def restrict_flux(self, fine_mesh):
-		raise NotImplementedError("Must implement CMFD flux restriction before continuing.")
+		super(FiniteDifferencePincell1D, self).restrict_flux(fine_mesh)
+		self._restricted_flux = np.array(self.flux)
 	
 	def prolong_flux(self, fine_mesh, coarse_flux):
-		raise NotImplementedError("Must implement CMFD flux prolongation before continuing.")
+		# TODO: Also update eigenvalue and boundary angular fluxes
+		# debug: normalize flux ratio like this
+		restricted_flux = self._restricted_flux/self._restricted_flux.mean()
+		factors = self.flux/self.flux.mean()/restricted_flux
+		for i in range(fine_mesh.nx):
+			cmi = i//self.ratio
+			for g in range(self.groups):
+				#fine_mesh.flux *= self.flux[cmi,g]/self._restricted_flux[cmi, g]
+				fine_mesh.flux[i, g] *= factors[cmi, g]
+		return fine_mesh.flux

@@ -34,9 +34,9 @@ class Accelerator(object):
 	
 	def prolong(self):
 		"""Update the fine mesh using the coarse mesh."""
-		self.coarse_mesh.prolong_flux(self.fine_mesh)
+		self.coarse_mesh.prolong_flux(self.fine_mesh, self.coarse_mesh.flux)
 	
-	def solve(self, eps):
+	def solve(self, ss, fs, k, eps):
 		"""Get the coarse mesh solution
 		
 		Parameter:
@@ -113,7 +113,7 @@ class RebalanceAccelerator1D(Accelerator):
 			l = -self.coarse_mesh.currents[0, -2, g]
 			node = self.coarse_mesh.nodes[-1]
 			phidx = self.coarse_mesh.flux[-1, g]
-			transport = node.sigma_tr[g]*phidx#*node.dx
+			transport = node.sigma_tr[g]*phidx
 			if bcr == "reflective":
 				c = self.coarse_mesh.currents[1, -1, g] + transport
 			elif bcr == "vacuum":
@@ -126,6 +126,7 @@ class RebalanceAccelerator1D(Accelerator):
 		
 		# Set up the creation matrix, [B]
 		matB = self.coarse_mesh.get_coarse_source(self.fine_mesh, ss, fs, k)
+		#matB /= matB.sum() # debug: normalize?
 		# CMR
 		self.rebalance_factors = linalg.solve(matA, matB)
 		# This is one long vector; reshape it into a multigroup array.
@@ -153,30 +154,204 @@ class RebalanceAccelerator1D(Accelerator):
 
 class FiniteDifference1D(Accelerator):
 	"""An Accelerator for the 1-D CMFD method"""
-	def __init__(self, coarse_mesh, fine_mesh, bcs):
-		super().__init__(coarse_mesh, fine_mesh, bcs)
+	def __init__(self, coarse_mesh, fine_mesh):
+		super().__init__(coarse_mesh, fine_mesh)
 		
-		# FIXME: This just does a generic diffusion solve, not actual CMFD.
-		# TODO: Modify diffusion kernel to do proper CMFD.
-		if coarse_mesh.nx_mod:
-			print("This should not execute in homogeneous medium.")
-			widths = scipy.array([
-				coarse_mesh.mod_xwidth, coarse_mesh.fuel_xwidth, coarse_mesh.mod_xwidth])
-			mats = scipy.array(
-				[coarse_mesh.mod, coarse_mesh.fuel, coarse_mesh.mod])
-			dxs = scipy.array(
-				[coarse_mesh.dx_mod, coarse_mesh.dx_fuel, coarse_mesh.dx_mod])
-		else:
-			widths = scipy.array([coarse_mesh.fuel_xwidth])
-			mats = scipy.array([coarse_mesh.fuel])
-			dxs = scipy.array([coarse_mesh.dx_fuel])
-		self.diffusion_problem = diffusion.Problem(dxs, widths, mats, bcs)
+		# Define the first set of coupling coefficients on the mesh
+		self.dtildes = scipy.zeros((2, self.coarse_mesh.nx, self.coarse_mesh.groups))
+		for g in range(self.coarse_mesh.groups):
+			# Interior nodes
+			for i in range(1, self.coarse_mesh.nx - 1):
+				nl = self.coarse_mesh.nodes[i - 1]
+				nc = self.coarse_mesh.nodes[i]
+				nr = self.coarse_mesh.nodes[i + 1]
+				self.dtildes[0, i, g] = 2*nc.D[g]*nr.D[g]/(nc.D[g]*nr.dx + nr.D[g]*nc.dx)
+				self.dtildes[1, i, g] = 2*nc.D[g]*nl.D[g]/(nc.D[g]*nl.dx + nl.D[g]*nc.dx)
+			# Boundary nodes
+			bcl, bcr = self.bcs
+			# Left edge
+			nc = self.coarse_mesh.nodes[0]
+			if bcl == "reflective":
+				self.dtildes[1, 0, g] = 0
+			elif bcl == "vacuum":
+				al = 0.5
+				self.dtildes[1, 0, g] = -2*al*nc.D[g]/(al*nc.dx + 2*nc.D[g])
+			else:
+				raise NotImplementedError(bcl)
+			# Right edge
+			nc = self.coarse_mesh.nodes[-1]
+			if bcr == "reflective":
+				self.dtildes[0, -1, g] = 0
+			elif bcr == "vacuum":
+				ar = 0.5
+				self.dtildes[0, -1, g] = -2*ar*nc.D[g]/(ar*nc.dx + 2*nc.D[g])
+			else:
+				raise NotImplementedError(bcr)
+			
+			
+		#print(self.dtildes)
 	
-	def solve(self, flux, fs, k, eps):
-		# TODO: Write the CMFD diffusion solver correctly
-		flux, fs, k = diffusion.solve_problem(self.diffusion_problem,
-		        fluxguess=flux, fsguess=fs, kguess=k,
-		        eps_inner=eps, eps_outer=eps, plot=False)
+	
+	def _build_matrix_a(self, flux):
+		"""Set up the destruction matrix, [A]"""
+		G = self.coarse_mesh.groups
+		NX = self.coarse_mesh.nx
+		NC = NX*G
+		matA = scipy.zeros((NC, NC))
+		for g in range(G):
+			i0 = g*NX
+			# Interior nodes
+			for cmi in range(1, NX - 1):
+				node = self.coarse_mesh.nodes[cmi]
+				cmidx = node.dx
+				# Fluxes
+				phil = flux[cmi-1, g]
+				phic = flux[cmi, g]
+				phir = flux[cmi+1, g]
+				# Currents
+				jplus =  -self.coarse_mesh.currents[0, cmi, g]
+				jminus = -self.coarse_mesh.currents[1, cmi+1, g]
+				# Coupling coefficients
+				dsquigl = self.dtildes[0, cmi, g]
+				dsquigr = self.dtildes[1, cmi, g]
+				dhatl = -(jminus + dsquigl*(phil - phic))/(phil + phic)
+				dhatr =  -(jplus + dsquigr*(phir - phic))/(phir + phic)
+				
+				# Matrix entries
+				l = +(dhatl - dsquigr)/cmidx
+				c = node.sigma_tr[g] + (dhatl - dhatr + dsquigl + dsquigr)/cmidx
+				r = -(dhatr + dsquigr)/cmidx
+				matA[i0 + cmi, (i0+cmi-1):(i0+cmi+2)] = [l, c, r]
+			# Boundary nodes
+			bcl, bcr = self.bcs
+			# Leftmost
+			node = self.coarse_mesh.nodes[0]
+			cmidx = node.dx
+			phic = flux[0, g]
+			phir = flux[1, g]
+			if bcl == "reflective":
+				dsquigr = self.dtildes[1, 0, g]  # [1, 1, g]?
+				# TODO: determine whether this is J+ or J-
+				jplus =  -self.coarse_mesh.currents[0, 0, g]
+				jminus = -self.coarse_mesh.currents[1, 1, g]
+				dhatr = -(jplus + dsquigr*(phir - phic))/(phir + phic)
+				# Matrix entries...TODO: Check the signs of these terms!
+				c = (dsquigr + dhatr)/cmidx + node.sigma_tr[g]
+				r = (dsquigr - dhatr)/cmidx
+				#matA[i0, i0:(i0+2)] = [c, r]
+			elif bcl == "vacuum":
+				"""I'm 100% sure this is wrong."""
+				dsquigr = self.dtildes[1, 1, g] # [1, 0, g]?
+				# TODO: check indexing. Pretty sure this actually uses jminus?
+				jplus = -self.coarse_mesh.currents[0, 0, g]
+				jminus = -self.coarse_mesh.currents[1, 1, g]
+				dhatr = -(jplus + dsquigr*(phir - phic))/(phir + phic)
+				# Matrix entries
+				c =  (dsquigr - dhatr - 0.5*jminus/phic)/cmidx + node.sigma_tr[g]
+				r = -(dsquigr + dhatr)/cmidx
+			else:
+				raise NotImplementedError(bcl)
+			matA[i0, i0:(i0+2)] = [c, r]
+			
+			node = self.coarse_mesh.nodes[-1]
+			cmidx = node.dx
+			if bcr == "reflective":
+				phil = flux[-2, g]
+				phic = flux[-1, g]
+				dsquigl = self.dtildes[0, -1, g]  # [1, -2, g]?
+				# TODO: determine whether this is J+ or J-
+				jplus = -self.coarse_mesh.currents[0, -2, g]
+				jminus = -self.coarse_mesh.currents[1, -1, g]
+				dhatl = -(jminus + dsquigl*(phil - phic))/(phil + phic)
+				# Matrix entries
+				l = (dsquigl - dhatl)/cmidx
+				c = (dsquigl + dhatl)/cmidx + node.sigma_tr[g]
+			#elif bcr == "vacuum":
+			else:
+				raise NotImplementedError(bcr)
+			matA[i0+NX-1, (i0+NX-2):(i0+NX)] = [l, c]
+			
+		return matA
+	
+	def _build_matrix_b(self, flux, k):
+		G = self.coarse_mesh.groups
+		NX = self.coarse_mesh.nx
+		NC = NX*G
+		matB = scipy.zeros(NC)
+		for g in range(G):
+			i0 = g*NX
+			for cmi in range(NX):
+				node = self.coarse_mesh.nodes[cmi]
+				fsi = 0.0
+				for gp in range(G):
+					phip = flux[cmi, gp]
+					# Fission source
+					fsi += node.chi[g]*node.nu_sigma_f[gp]*phip/k
+					# Scatter source
+					fsi += node.scatter_matrix[g, gp]*phip
+				matB[i0 + cmi] = fsi
+		return matB
+			
+	def solve(self, ss, fs, k, eps):
+		G = self.coarse_mesh.groups
+		NX = self.coarse_mesh.nx
+		NC = NX*G
+		
+		old_flux = self.coarse_mesh.flux
+		
+		fsdiff = 1
+		kdiff = 1
+		outer_count = 0
+		oldS = self._build_matrix_b(old_flux, 1)
+		oldk = k
+		while ((fsdiff > 1E-5) or (kdiff > 1E-5)) and (outer_count < 1000):
+			matA = self._build_matrix_a(old_flux)
+			matB = self._build_matrix_b(old_flux, oldk)
+			fluxdiff = 1
+			inner_count = 0
+			while fluxdiff > eps:
+				flux = linalg.solve(matA, matB)
+				flux.shape = (G, NX)
+				flux = flux.T
+				
+				fluxdiff = 0
+				for g in range(G):
+					for i in range(NX):
+						phi1 = flux[i, g]
+						phi0 = old_flux[i, g]
+						if phi1 != phi0:
+							fluxdiff += ((phi1 - phi0)/phi1)**2
+					fluxdiff = scipy.sqrt(fluxdiff/NC)
+				
+				old_flux = scipy.array(flux)
+				inner_count += 1
+				if inner_count >= 1000:
+					raise SystemError("Maximum inner iterations reached")
+				
+			#print("Diffusion converged after {} inner iterations.".format(inner_count))
+			# Now we've converged the flux at the fission source
+			newS = self._build_matrix_b(flux, 1)
+			k = oldk*newS.sum()/oldS.sum()
+			kdiff = abs(k - oldk)/oldk
+			
+			outer_count += 1
+			#print("Diffusion Outer {}: k = {}, kdiff = {}".format(outer_count, k, kdiff))
+			
+			fsdiff = 0
+			for i in range(NC):
+				fs1 = newS[i]
+				fs0 = oldS[i]
+				if fs1 != fs0:
+					fsdiff+= ((fs1 - fs0)/fs1)**2
+			fsdiff = scipy.sqrt(fsdiff/NC)
+			
+			oldS = scipy.array(newS)
+			oldk = k
+			
+			if outer_count >= 1000:
+				raise SystemError("Maximum inner iterations reached")
+		
+		print("Diffusion converged after {} outer iterations.".format(outer_count))
 		self.coarse_mesh.flux = flux
-		# TODO: Figure out what to do with these
-		return flux, fs, k
+	
+	

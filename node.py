@@ -43,6 +43,8 @@ class Node1D(object):
 		self.nu_sigma_f = material.nu_sigma_f
 		self.chi = material.chi
 		self.sigma_tr = material.sigma_tr
+		self.D = material.D
+		self.sigma_r = material.sigma_r
 		
 		
 		# Precalcuate a commonly-used term
