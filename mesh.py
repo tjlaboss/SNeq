@@ -6,6 +6,7 @@
 
 import node
 import numpy as np
+from constants import BOUNDARY_CONDITIONS
 
 class Mesh(object):
 	"""One-group, n-dimensional Cartesian mesh
@@ -32,11 +33,18 @@ class Mesh(object):
 		#self.wxyz = wxyz
 		#self.nxyz = nxyz
 		self.groups = groups
+		self.bcs = None
 	
 	def _populate(self):
 		"""Populate the mesh with appropriate nodes"""
 		pass
-
+	
+	def set_bcs(self, bcs):
+		for bc in bcs:
+			assert bc in BOUNDARY_CONDITIONS, \
+				"{} is an unknown boundary condition.".format(bc)
+		pass
+		
 
 class Mesh1D(Mesh):
 	"""One-dimentional mesh
@@ -67,6 +75,13 @@ class Mesh1D(Mesh):
 		for non-uniform methods.
 		"""
 		return self.xwidth/self.nx
+	
+	def set_bcs(self, bcs):
+		if bcs is not None:
+			super().set_bcs(bcs)
+			assert len(bcs) == 2, \
+				"A 1D mesh requires 2 boundary conditions."
+			self.bcs = bcs
 	
 	def update_nodal_fluxes(self):
 		"""Update the scalar flux in the nodes from that on the mesh."""

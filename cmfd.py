@@ -35,6 +35,7 @@ class FiniteDifferencePincell1D(CoarseMeshPincell1D):
 		        fine_mesh.mod, fine_mesh.fuel,
 				fine_mesh.pitch, fine_mesh.width, nx_mod, nx_fuel,
 		        fine_mesh.groups, fine_mesh.source, ratio)
+		cm.bcs = fine_mesh.bcs
 		return cm
 	
 	def restrict_flux(self, fine_mesh):

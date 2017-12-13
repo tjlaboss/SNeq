@@ -86,11 +86,13 @@ print("kinf = {:1.5f}".format(kinf))
 s2 = quadrature.GaussLegendreQuadrature(2)
 KGUESS = kinf
 cell = Pincell1D(s2, mod_mat, fuel_mat, PITCH, WIDTH, NXMOD, NXFUEL, groups=G)
+cell.set_bcs(BOUNDARIES)
 coarse_mesh = None
 
-'''
 # test CMR
 coarse_mesh = RebalancePincell1D().fromFineMesh(cell, 2)
+cmr = accelerator.RebalanceAccelerator1D(coarse_mesh, cell)
+'''
 coarse_mesh.restrict_flux(cell)
 coarsine = np.array([np.cos((i-1.5)*np.pi/coarse_mesh.nx) for i in range(coarse_mesh.nx)])
 new_flux = np.empty((coarse_mesh.nx, G))
@@ -100,13 +102,11 @@ coarse_mesh.prolong_flux(cell, new_flux)
 
 raise SystemExit
 '''
-
 # test CMFD
-coarse_mesh = FiniteDifferencePincell1D().fromFineMesh(cell, 2)
-cmfd = accelerator.FiniteDifference1D(coarse_mesh, BOUNDARIES)
+#coarse_mesh = FiniteDifferencePincell1D().fromFineMesh(cell, 2)
+#cmfd = accelerator.FiniteDifference1D(coarse_mesh, BOUNDARIES)
 
-solver = calculator.DiamondDifferenceCalculator1D(s2, cell, BOUNDARIES,
-                                                  accelerator=cmfd, kguess=KGUESS)
+solver = calculator.DiamondDifferenceCalculator1D(s2, cell, accelerator=cmr, kguess=KGUESS)
 solver.transport_sweep(KGUESS)
 
 converged = solver.solve(eps=1E-6, maxiter=200)

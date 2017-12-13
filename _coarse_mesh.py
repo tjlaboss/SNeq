@@ -13,7 +13,7 @@ class CoarseMeshPincell1D(pincell.Pincell1D):
 		if not ((quad is None) or (groups is None) or (ratio is None)):
 			super().__init__(quad, mod, fuel, pitch, width, nx_mod, nx_fuel, groups, source)
 			self.ratio = ratio
-			self.currents = np.zeros((2, self.nx, self.groups))
+			self.currents = np.zeros((2, self.nx+1, self.groups))
 			self._populate()
 		self.psi = None
 	

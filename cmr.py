@@ -3,6 +3,7 @@
 # Coarse Mesh Rebalance tools
 
 from _coarse_mesh import CoarseMeshPincell1D
+import numpy as np
 
 
 class RebalancePincell1D(CoarseMeshPincell1D):
@@ -22,7 +23,9 @@ class RebalancePincell1D(CoarseMeshPincell1D):
 		nx_fuel = fine_mesh.nx_fuel//ratio
 		nx_mod = fine_mesh.nx_mod//ratio
 		cm = RebalancePincell1D(fine_mesh.quad, fine_mesh.mod, fine_mesh.fuel,
-		                        nx_mod, nx_fuel, fine_mesh.groups, ratio)
+		                        fine_mesh.pitch, fine_mesh.width, nx_mod, nx_fuel,
+		                        fine_mesh.groups, fine_mesh.source, ratio)
+		cm.set_bcs(fine_mesh.bcs)
 		return cm
 	
 	def _restrict_cross_sections(self):
@@ -67,17 +70,67 @@ class RebalancePincell1D(CoarseMeshPincell1D):
 					i = self.ratio*cmi + fmi
 					dxi = fine_mesh.nodes[i].dx
 					for n in range(self.quad.N):
-						psi_n0 = fine_mesh.psi[i, n, g]  # *dxi     # LHS integrated flux
-						psi_n1 = fine_mesh.psi[i + 1, n, g]  # *dxi # RHS integrated flux
+						psi_n0 = fine_mesh.psi[i, n, g]#*dxi     # LHS integrated flux
+						psi_n1 = fine_mesh.psi[i+1, n, g]#*dxi # RHS integrated flux
 						if n < self.quad.N2:
 							jplus += self.quad.weights[n]*abs(self.quad.mus[n])*psi_n1
 						else:
 							jminus += self.quad.weights[n]*abs(self.quad.mus[n])*psi_n0
-						phi += 0.5*(psi_n0 + psi_n1)  # diamond difference approxmation
-				self.currents[:, cmi, g] = jplus, jminus
+						#phi += 0.5*(psi_n0 + psi_n1)  # diamond difference approxmation
+					# I wonder if this is more accurate?
+					phi += fine_mesh.flux[i, g]#*dxi#??
+				self.currents[0, cmi+1, g] = jplus
+				self.currents[1, cmi, g] = jminus
 				self.flux[cmi, g] = phi
+			# Boundary conditions
+			#print("Currents before BCs:")
+			#print(self.currents[:,:,g])
+			bcl, bcr = self.bcs
+			if bcl == "reflective":
+				self.currents[0, 0, g] = self.currents[1, 0, g]
+			elif bcl == "periodic":
+				self.currents[0, 0, g] = self.currents[0, -1, g]
+			elif bcl == "vacuum":
+				# Should already be 0
+				pass
+			else:
+				raise NotImplementedError(bcl)
+			if bcr == "reflective":
+				self.currents[1, -1, g] = self.currents[0, -1, g]
+			elif bcr == "periodic":
+				self.currents[1, -1, g] = self.currents[0, 0, g]
+			elif bcr == "vacuum":
+				# should already be 0
+				pass
+			else:
+				raise NotImplementedError(bcr)
+			#print("Currents with BCs:")
+			#print(self.currents[:, :, g])
+			#print()
 	
-	def prolong_flux(self, fine_mesh, coarse_flux):
+	def get_coarse_source(self, fine_mesh, fine_ss, fine_fs, k):
+		"""Integrate the fine mesh fission source to get the
+		coarse mesh source vector.
+
+		Parameters:
+		-----------
+		fine_source:        multigroup array of the fission source
+		k:                  float; latest guess of the eigenvalue
+		"""
+		coarse_source = np.zeros((self.nx*self.groups))
+		index = lambda ii, gg: ii + self.nx*gg
+		for g in range(self.groups):
+			for cmi in range(self.nx):
+				fsi = 0.0
+				for fmi in range(self.ratio):
+					i = self.ratio*cmi + fmi
+					dxi = fine_mesh.nodes[i].dx
+					fsi += (fine_fs[i, g]/k + fine_ss[i, g])#*dxi
+				j = index(cmi, g)
+				coarse_source[j] = fsi
+		return coarse_source
+	
+	def prolong_flux(self, fine_mesh, factors):
 		"""Use the coarse mesh flux to update the fine mesh flux.
 		This RebalancePincell1D's flux will be updated to the
 		coarse flux after the prolongation is complete.
@@ -87,11 +140,10 @@ class RebalancePincell1D(CoarseMeshPincell1D):
 		fine_mesh:      Pincell1D instance
 		coarse_flux:    array of the new coarse flux to use for the prolongation.
 		"""
-		factors = self._get_rebalance_factors(coarse_flux)
 		for i in range(fine_mesh.nx):
 			cmi = i//self.ratio
 			fi = factors[cmi]
 			for g in range(self.groups):
 				fine_mesh.flux[i, g] *= fi[g]
-		self.flux = coarse_flux
+		return fine_mesh.flux
 
