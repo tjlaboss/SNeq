@@ -68,9 +68,42 @@ class Mesh1D(Mesh):
 		"""
 		return self.xwidth/self.nx
 	
-	def update_nodal_fluxes(self):
-		"""Update the scalar flux in the nodes from that on the mesh."""
-		for g in range(self.groups):
-			for i in range(self.nx):
-				self.nodes[i].flux[g] = self.flux[i, g]
+	def calculate_scatter_source(self):
+		ss = np.zeros((self.nx, self.groups))
+		for i in range(self.nx):
+			phi_vector = self.flux[i]
+			ss[i] = self.nodes[i].scatter_matrix.dot(phi_vector)
+		return ss
+	
 
+class Mesh2D(Mesh):
+	"""Two-dimentional mesh
+
+	Parameters:
+	-----------
+	quad:           Quadrature; 2-D or 3-D angular quadrature to use
+
+
+	Attributes:
+	-----------
+
+	"""
+	def __init__(self, quad, xwidth, ywidth, nx, ny, groups):
+		super().__init__(2, quad, [xwidth, ywidth], [nx, ny], groups)
+		self.nx = nx
+		self.ny = ny
+		self.xwidth = xwidth
+		self.ywidth = ywidth
+		self.nodes = np.empty((nx, ny), dtype=node.Node2D)
+		self.flux = np.ones((nx, ny, groups))
+		self.psi = np.zeros((nx + 1, ny + 1, quad.Nflux, groups))
+	
+
+	def calculate_scatter_source(self):
+		ss = np.zeros((self.nx, self.ny, self.groups))
+		for i in range(self.nx):
+			for j in range(self.ny):
+				phi_vector = self.flux[i, j]
+				ss[i, j] = self.nodes[i, j].scatter_matrix.dot(phi_vector)
+		return ss
+	

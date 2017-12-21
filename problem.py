@@ -37,8 +37,8 @@ PITCH = 1.25            # cm; pin pitch
 WIDTH = 0.80            # cm; length of one side of the square fuel pin
 
 
-class Pincell1D(mesh.Mesh1D):
-	"""Mesh for a one-dimensional pincell with 3 regions:
+class Pincell2D(mesh.Mesh2D):
+	"""Mesh for a two-dimensional pincell with 3 regions:
 	mod, fuel, and mod
 	
 	Parameters:
@@ -51,17 +51,22 @@ class Pincell1D(mesh.Mesh1D):
 	-----------
 	
 	"""
-	def __init__(self, quad, mod, fuel, nx_mod, nx_fuel, groups=1):
+	def __init__(self, quad, mod, fuel, nx_mod, nx_fuel, ny_mod, ny_fuel, groups=1):
 		nx = 2*nx_mod + nx_fuel
-		super().__init__(quad, PITCH, nx, groups)
+		ny = 2*ny_mod + ny_fuel
+		super().__init__(quad, PITCH, PITCH, nx, ny, groups)
 		self.fuel = fuel
 		self.mod = mod
 		assert groups == fuel_mat.groups == mod_mat.groups, \
 			"Unequal number of energy groups in problem and materials."
 		self.nx_mod = nx_mod
 		self.nx_fuel = nx_fuel
+		self.ny_mod = ny_mod
+		self.ny_fuel = ny_fuel
 		self.fuel_xwidth = WIDTH
 		self.mod_xwidth = (PITCH - WIDTH)/2.0
+		self.fuel_ywidth = WIDTH
+		self.mod_ywidth = (PITCH - WIDTH)/2.0
 		# Ranges
 		self.mod0_lim0 = 0
 		self.mod0_lim1 = self.nx_mod - 1
@@ -69,10 +74,17 @@ class Pincell1D(mesh.Mesh1D):
 		self.fuel_lim1 = self.nx_mod + self.nx_fuel - 1
 		self.mod1_lim0 = self.nx_mod + self.nx_fuel
 		self.mod1_lim1 = self.nx - 1
-		# Remove the next two lines for non-uniform meshes in each region
+		# Remove the next four lines for non-uniform meshes in each region
 		self._dx_fuel = self.fuel_xwidth/self.nx_fuel
-		self._dx_mod = self.mod_xwidth/self.nx_mod
+		self._dy_fuel = self.fuel_ywidth/self.ny_fuel
+		if self.nx_mod:
+			self._dx_mod = self.mod_xwidth/self.nx_mod
+			self._dy_mod = self.mod_ywidth/self.ny_mod
+		else:
+			self._dx_mod = 0.0
+			self._dy_mod = 0.0
 		self._dxs = (self._dx_mod, self._dx_fuel, self._dx_mod)
+		self._dys = (self._dy_mod, self._dy_fuel, self._dy_mod)
 		#
 		self._populate()
 		
@@ -88,39 +100,46 @@ Indices:
 """.format(**locals())
 		return rep
 	
-	def get_region(self, i):
-		if i <= self.mod0_lim1:
+	def get_region(self, i, j):
+		if i <= self.mod0_lim1 or j <= self.mod0_lim0:
 			return 0
-		elif i <= self.fuel_lim1:
+		elif i <= self.fuel_lim1 and j <= self.fuel_lim1:
 			return 1
-		elif i <= self.mod1_lim1:
+		elif i <= self.mod1_lim1 or j <= self.mod1_lim1:
 			return 2
 		else:
 			errstr = "Invalid index {} for mesh of size {}.".format(i, self.nx)
 			raise IndexError(errstr)
 	
-	def get_dx(self, i):
-		j = self.get_region(i)
-		return self._dxs[j]
+	def get_dxy(self, i, j):
+		k = self.get_region(i, j)
+		return self._dxs[k], self._dys[k]
 	
 	def _populate(self):
 		for i in range(self.nx):
-			region = self.get_region(i)
-			dx = self.get_dx(i)
-			if region == 1:
-				fuel_node = node.Node1D(dx, self.quad, self.fuel.macro_xs, FIXED_SOURCE)
-				self.nodes[i] = fuel_node
-			else:
-				mod_node = node.Node1D(dx, self.quad, self.mod.macro_xs)
-				self.nodes[i] = mod_node
-
+			for j in range(self.ny):
+				region = self.get_region(i, j)
+				dx, dy = self.get_dxy(i, j)
+				if region == 1:
+					fuel_node = node.Node2D(dx, dy, self.quad, self.fuel.macro_xs, self.groups, FIXED_SOURCE)
+					self.nodes[i] = fuel_node
+				else:
+					mod_node = node.Node2D(dx, dy, self.quad, self.mod.macro_xs, self.groups)
+					self.nodes[i] = mod_node
+			
+	def calculate_fission_source(self):
+		return None
 
 # test
-s4 = quadrature.GaussLegendreQuadrature(2)
-cell = Pincell1D(s4, mod_mat, fuel_mat, nx_mod=5, nx_fuel=8)
-solver = calculator.DiamondDifferenceCalculator1D(s4, cell, ("vacuum", "vacuum"))
-solver.transport_sweep()
-solver.solve(eps=1E-10)
+BOUNDARIES = ["vacuum"]*4
+NFUEL = 8
+NMOD = 0#5
+s4 = quadrature.LevelSymmetricQuadrature(4)
+cell = Pincell2D(s4, mod_mat, fuel_mat, NMOD, NFUEL, NMOD, NFUEL)
+solver = calculator.DiamondDifferenceCalculator2D(s4, cell, BOUNDARIES, kguess=None)
+solver.transport_sweep(None)
+raise SystemExit
+#solver.solve(eps=1E-10)
 phi = solver.mesh.flux
 print(phi)
 print(mod_mat.macro_xs)

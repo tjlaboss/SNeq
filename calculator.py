@@ -6,8 +6,138 @@ import numpy as np
 from warnings import warn
 from constants import BOUNDARY_CONDITIONS
 
-class DiamondDifferenceCalculator1D(object):
-	"""One-group, one-dimensional diamond difference solver
+class DiamondDifferenceCalculator(object):
+	"""Constructor class for diamond difference solvers
+
+	Parameters:
+	-----------
+	quad:           Quadrature; 1-D angular quadrature to use
+	mesh:           Mesh1D; 1-D mesh to solve on.
+					Use one tailored to your problem.
+	bcs:            tuple of ("left", "right")
+	kguess:         float; initial guess for the eigenvalue
+					[Default: 1.0]
+	accelerator:    Accelerator, if one is desired
+					[Default: None]
+	"""
+	
+	def __init__(self, quad, mesh, bcs, kguess=1.0, accelerator=None):
+		self.quad = quad
+		self.mesh = mesh
+		self.k = kguess
+		self.accelerator = accelerator
+		self.fission_source = self.mesh.calculate_fission_source()
+		self.scatter_source = self.mesh.calculate_scatter_source()
+	
+	def _set_bcs(self, bcs):
+		# TODO: CORNER CASES
+		for bc in bcs:
+			assert bc in BOUNDARY_CONDITIONS, \
+				"{} is an unknown boundary condition.".format(bc)
+		nd = len(bcs) // 2
+		
+		# East and west sides
+		wc, ec = bcs[0:2]
+		if "periodic" in bcs and wc != ec:
+			errstr = "If one edge has a periodic boundary condition, " \
+			         "both sides must."
+			raise TypeError(errstr)
+		
+		if "periodic" in bcs:
+			raise NotImplementedError("periodic boundary condition")
+			get_west = lambda n, g: self.mesh.psi[-1, n, g]
+			get_east = lambda n, g: self.mesh.psi[0, n, g]
+			return get_west, get_east
+		
+		if wc == "reflective":
+			if nd == 1:
+				def get_west(n, g):
+					m = self.quad.reflect_angle(n)
+					return self.mesh.psi[0, m, g]
+			elif nd == 2:
+				def get_west(j, n, g):
+					m = self.quad.reflect_angle(n)
+					return self.mesh.psi[0, j, m, g]
+			else:
+				raise NotImplementedError("{}D".format(nd))
+		
+		elif wc == "vacuum":
+			# No flux incoming from left
+			if nd == 1:
+				get_west = lambda n, g: 0
+			elif nd == 2:
+				get_west = lambda j, n, g: 0
+		else:
+			raise NotImplementedError(wc)
+		
+		if ec == "reflective":
+			if nd == 1:
+				def get_east(n, g):
+					m = self.quad.reflect_angle(n)
+					return self.mesh.psi[-1, m, g]
+			elif nd == 2:
+				def get_east(j, n, g):
+					m = self.quad.reflect_angle(n)
+					return self.mesh.psi[-1, j, m, g]
+			else:
+				raise NotImplementedError("{}D".format(nd))
+
+		elif ec == "vacuum":
+			# No flux incoming from right
+			if nd == 1:
+				get_east = lambda n, g: 0
+			elif nd == 2:
+				get_east = lambda j, n, g: 0
+			else:
+				get_east = lambda j, k, n, g: 0
+		else:
+			raise NotImplementedError(ec)
+		
+		if nd == 1:
+			return get_west, get_east
+			
+		# North and south sides
+		nc, sc = bcs[2:4]
+		if nc == "reflective":
+			if nd == 2:
+				def get_north(i, n, g):
+					m = self.quad.reflect_angle(n)
+					return self.mesh.psi[i, 0, m, g]
+			else:
+				raise NotImplementedError("{}D".format(nd))
+		elif nc == "vacuum":
+			# No flux incoming from top
+			if nd == 2:
+				get_north = lambda i, n, g: 0
+			else:
+				get_north = lambda i, k, n, g: 0
+		else:
+			raise NotImplementedError(nc)
+		
+		if sc == "reflective":
+			if nd == 2:
+				def get_south(i, n, g):
+					m = self.quad.reflect_angle(n)
+					return self.mesh.psi[i, -1, m, g]
+			else:
+				raise NotImplementedError("{}D".format(nd))
+		elif sc == "vacuum":
+			if nd == 2:
+				get_south = lambda i, n, g: 0
+			else:
+				get_south = lambda i, k, n, g: 0
+		else:
+			raise NotImplementedError(sc)
+		
+		if nd == 2:
+			return get_west, get_east, get_north, get_south
+
+	def transport_sweep(self, k):
+		pass
+
+
+class DiamondDifferenceCalculator1D(DiamondDifferenceCalculator):
+	"""Two-group, one-dimensional diamond difference solver
 	
 	Parameters:
 	-----------
@@ -21,52 +151,17 @@ class DiamondDifferenceCalculator1D(object):
 					[Default: None]
 	"""
 	def __init__(self, quad, mesh, bcs, kguess=1.0, accelerator=None):
-		self.quad = quad
-		self.mesh = mesh
-		self.k = kguess
-		self.accelerator = accelerator
-		self.fission_source = self.mesh.calculate_fission_source()
-		self.scatter_source = self.mesh.calculate_scatter_source()
-		self._get_psi_left, self._get_psi_right = self.__set_bcs(bcs)
+		assert len(bcs) == 2, "A 1D solution requires 2 boundary conditions."
+		super().__init__(quad, mesh, bcs, kguess, accelerator)
+		self._get_psi_west, self._get_psi_east = self._set_bcs(bcs)
 	
 	
-	def __set_bcs(self, bcs):
-		for bc in bcs:
-			assert bc in BOUNDARY_CONDITIONS, \
-				"{} is an unknown boundary condition.".format(bc)
-		lc, rc = bcs
-		if "periodic" in bcs and lc != rc:
-			errstr = "If one edge has a periodic boundary condition, " \
-			         "both sides must."
-			raise TypeError(errstr)
-		
-		if "periodic" in bcs:
-			#raise NotImplementedError("periodic boundary condition")
-			get_left = lambda n, g: self.mesh.psi[-1, n, g]
-			get_right = lambda n, g: self.mesh.psi[0, n, g]
-			return get_left, get_right
-		
-		if lc == "reflective":
-			def get_left(n, g):
-				m = self.quad.reflect_angle(n)
-				return self.mesh.psi[0, m, g]
-		elif lc == "vacuum":
-			# No flux incoming from left
-			get_left = lambda n, g: 0
-		else:
-			raise NotImplementedError(lc)
-		
-		if rc == "reflective":
-			def get_right(n, g):
-				m = self.quad.reflect_angle(n)
-				return self.mesh.psi[-1, m, g]
-		elif rc == "vacuum":
-			# No flux incoming from right
-			get_right = lambda n, g: 0
-		else:
-			raise NotImplementedError(rc)
-		
-		return get_left, get_right
+	def _get_source(self, i, g, k=None):
+		source = self.mesh.nodes[i].source
+		source += 0.5*self.scatter_source[i, g]
+		if k:
+			source += 0.5*self.fission_source[i, g]/k
+		return source
 	
 	def transport_sweep(self, k):
 		"""Perform one forward and one backward transport sweep.
@@ -80,11 +175,11 @@ class DiamondDifferenceCalculator1D(object):
 			# Forward sweep
 			for n in range(self.quad.N2):
 				mu = abs(self.quad.mus[n])
-				psi_in = self._get_psi_left(n, g)
+				psi_in = self._get_psi_west(n, g)
 				self.mesh.psi[0, n] = psi_in
 				for i in range(self.mesh.nx):
 					node = self.mesh.nodes[i]
-					q = 0.5*self.fission_source[i]/k + 0.5*self.scatter_source[i]
+					q = self._get_source(i, g, k)
 					psi_out = psi_in*(2*mu - node.dx*node.sigma_tr[g]) + 2*node.dx*q
 					psi_out /= 2*mu + node.dx*node.sigma_tr[g]
 					
@@ -95,11 +190,11 @@ class DiamondDifferenceCalculator1D(object):
 			# Backward sweep
 			for n in range(self.quad.N2, self.quad.N):
 				mu = abs(self.quad.mus[n])
-				psi_in = self._get_psi_right(n, g)
+				psi_in = self._get_psi_east(n, g)
 				self.mesh.psi[-1, n, g] = psi_in
 				for i in range(self.mesh.nx):
 					node = self.mesh.nodes[-1-i]
-					q = 0.5*self.fission_source[i, g]/k + 0.5*self.scatter_source[i, g]
+					q = self._get_source(i, g, k)
 					psi_out = psi_in*(2*mu - node.dx*node.sigma_tr[g]) + 2*node.dx*q
 					psi_out /= 2*mu + node.dx*node.sigma_tr[g]
 					
@@ -124,24 +219,32 @@ class DiamondDifferenceCalculator1D(object):
 		
 		# Get the fission source and flux differences
 		fluxdiff = 0.0
-		fsdiff = 0.0
-		fs_new = self.mesh.calculate_fission_source()
+		
+		if self.fission_source:
+			fsdiff = 0.0
+			fs_new = self.mesh.calculate_fission_source()
+			for i in range(self.mesh.nx):
+				for g in range(self.mesh.groups):
+					# Calculate the fission source difference
+					fs0 = self.fission_source[i, g]
+					fs1 = fs_new[i, g]
+					if fs1 != fs0:
+						fsdiff += ((fs1 - fs0)/fs1)**2
+			rms_fs = np.sqrt(fsdiff/self.mesh.nx)
+		else:
+			rms_fs = 0.0
+			fs_new = 0
+		
 		
 		for i in range(self.mesh.nx):
 			for g in range(self.mesh.groups):
-				# Calculate the fission source difference
-				fs0 = self.fission_source[i, g]
-				fs1 = fs_new[i, g]
-				if fs1 != fs0:
-					fsdiff += ((fs1 - fs0)/fs1)**2
 				# Calculate the flux difference
 				phi_i1 = self.mesh.flux[i, g]
 				phi_i0 = old_flux[i, g]
 				if phi_i1 != phi_i0:
 					fluxdiff += ((phi_i1 - phi_i0)/phi_i1)**2
-				
 		rms_flux = np.sqrt(fluxdiff/self.mesh.nx)
-		rms_fs = np.sqrt(fsdiff/self.mesh.nx)
+		
 		
 		return fs_new, rms_fs, rms_flux
 		
@@ -167,6 +270,11 @@ class DiamondDifferenceCalculator1D(object):
 			print("kguess = {}".format(self.k))
 			inner_count = 0
 			fluxdiff = eps + 1
+			
+			if not self.fission_source:
+				fsdiff = 0
+				kdiff = 0
+			
 			while fluxdiff > eps:
 				fs, fsdiff, fluxdiff = self.transport_sweep(self.k)
 				# Inner: converge the flux
@@ -190,24 +298,24 @@ class DiamondDifferenceCalculator1D(object):
 				#print("Inner Iter {}: flux, rms = {}".format(inner_count, fluxdiff))
 				#print(self.mesh.flux)
 			
-			print("Outer Iteration {}: flux converged at kguess = {}".format(inner_count, self.k))
+			print("Outer Iteration {}: flux converged at kguess = {}".format(outer_count, self.k))
 			print(self.mesh.flux)
 			
 			
 			# Now that flux has been converged, guess a new k
 			# and update the fission source
 			# Also find the relative difference in k
-			print(self.fission_source, "->", fs)
 			ss = self.mesh.calculate_scatter_source()
-			k_new = self.k*fs.sum()/self.fission_source.sum()
-			kdiff = abs(k_new - self.k)/k_new
-			# k_new = (fs.sum() + ss.sum())/(self.fission_source.sum()/self.k + self.scatter_source.sum())
-			print("k: {}\tkdiff: {}".format(k_new, kdiff))
-			self.fission_source = fs
+			if self.fission_source:
+				print(self.fission_source, "->", fs)
+				k_new = self.k*fs.sum()/self.fission_source.sum()
+				kdiff = abs(k_new - self.k)/k_new
+				print("k: {}\tkdiff: {}".format(k_new, kdiff))
+				self.fission_source = fs
+				self.k = k_new
+				print("\n\n")
 			self.scatter_source = ss
-			self.k = k_new
 			
-			print("\n\n")
 			
 			outer_count += 1
 			if outer_count >= maxiter:
@@ -219,3 +327,181 @@ class DiamondDifferenceCalculator1D(object):
 		print("Solution converged after {} outer iterations.".format(outer_count))
 		return True
 		
+
+class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
+	"""One-group, two-dimensional diamond difference solver
+	
+	This class currently saves the angular fluxes. It doesn't have to,
+	but it makes development and debugging far easier.
+	
+	Parameters:
+	-----------
+	quad:           Quadrature; 2-D angular quadrature to use
+	mesh:           Mesh2D; 2-D mesh to solve on.
+					Use one tailored to your problem.
+	bcs:            tuple of ("west", "east", "north", "south")
+	kguess:         float; initial guess for the eigenvalue
+					[Default: 1.0]
+	"""
+	def __init__(self, quad, mesh, bcs, kguess=1.0, accelerator=None):
+		super().__init__(quad, mesh, bcs, kguess, accelerator)
+		self._get_psi_west, self._get_psi_east, self._get_psi_north, \
+			self._get_psi_south = self._set_bcs(bcs)
+		self.nmax = max(self.mesh.nx, self.mesh.ny)
+	
+	def _get_source(self, i, j, g, k=None):
+		"""Get the fixed and scattering source at a given location.
+		Fission source is ignored, but will be enabled
+		for the eigenvalue problem when that is implemented.
+		
+		Parameters:
+		----------
+		i:          int; x-index
+		j:          int; y-index
+		g:          int; energy group index
+		k:          float; estimate for the eigenvalue
+					[Not implemented]
+		
+		Returns:
+		--------
+		source:     float; total source at (i, j)
+		"""
+		source = self.mesh.nodes[i, j].source
+		source += 0.5*self.scatter_source[i, j, g]
+		#if k:
+		#	source += 0.5*self.fission_source[i, g]/k
+		return source
+	
+	def l2norm2d(self, old_array):
+		diff = 0.0
+		for i in range(self.mesh.nx):
+			for j in range(self.mesh.ny):
+				for g in range(self.mesh.groups):
+					# Calculate the flux difference
+					f1 = self.mesh.flux[i, g]
+					f0 = old_array[i, j, g]
+					if f1 != f0:
+						diff += ((f1 - f0)/f1)**2
+		rms = np.sqrt(diff/self.mesh.nx/self.mesh.nx)
+		return rms
+	
+	def transport_sweep(self, k=None):
+		"""Perform a round of 2D transport sweeps.
+		
+		1. Forward (from the top left)
+		2. Forward (from the bottom left)
+		3. Backward (from the top right)
+		4. Backward (from the bottom right)
+		
+		Parameter:
+		----------
+		k:          float; guess for the eigenvalue.
+					Currently not hooked up to anything; it's just a placebo.
+					[Default: None]
+		
+		Returns:
+		--------
+		float; RMS of the flux after the sweep
+		"""
+		old_flux = np.array(self.mesh.flux[:, :, :])
+		# FIXME: The code below is unvalidated.
+		for g in range(self.mesh.groups):
+			# Forward sweep from top left:
+			# +mux, -muy, 0 -> npq
+			for n in range(self.quad.npq):
+				mux = abs(self.quad.muxs[n])
+				muy = abs(self.quad.muys[n])
+				# FIXME: This will work with vacuum but is untested for reflective
+				# Watch for weirdness with corner cases.
+				psi_in_wn = self._get_psi_west(0, n, g)
+				self.mesh.psi[0, 0, n, g] = psi_in_wn
+				psi_in_ws = self._get_psi_west(1, n, g)
+				self.mesh.psi[0, 1, n, g] = psi_in_ws
+				psi_in_w = 0.5*(psi_in_wn + psi_in_ws)
+				#for ij in range(self.nmax):
+				for i in range(self.mesh.nx):
+					psi_in_nw = self._get_psi_north(0, n, g)
+					psi_in_ne = self._get_psi_north(1, n, g)
+					# TODO: Check if the boundary condition is applied correctly!
+					psi_in_n = 0.5*(psi_in_nw + psi_in_ne)
+					for j in range(self.mesh.ny):
+						node = self.mesh.nodes[i, j]
+						q = self._get_source(i, j, g, k)
+						#psi_out = psi_in*(2*mu - node.dx*node.sigma_tr[g]) + 2*node.dx*q
+						#psi_out /= 2*mu + node.dx*node.sigma_tr[g]
+						xcoeff = 2*mux/node.dx
+						ycoeff = 2*muy/node.dy
+						psi_bar = (q + xcoeff*psi_in_w + ycoeff*psi_in_n) / \
+						          (node.sigma_tr[g] + xcoeff + ycoeff)
+						psi_out_e = 2*psi_bar - psi_in_w
+						psi_out_s = 2*psi_bar - psi_in_n
+						self.mesh.psi[i+1, j, n, g] = psi_out_e
+						self.mesh.psi[i, j+1, n, g] = psi_out_s
+						psi_in_w = psi_out_e
+						psi_in_n = psi_out_s
+						
+			# Forward sweep from bottom left:
+			# +mux, +muy, 0 -> npq
+			for n in range(self.quad.npq, 2*self.quad.npq):
+				mux = abs(self.quad.muxs[n - self.quad.npq])
+				muy = abs(self.quad.muys[n - self.quad.npq])
+				# FIXME: This will work with vacuum but is untested for reflective
+				# Watch for weirdness with corner cases.
+				psi_in_wn = self._get_psi_west(0, n, g)
+				self.mesh.psi[0, -1, n, g] = psi_in_wn
+				psi_in_ws = self._get_psi_west(1, n, g)
+				self.mesh.psi[0, -2, n, g] = psi_in_ws
+				psi_in_w = 0.5*(psi_in_wn + psi_in_ws)
+				# for ij in range(self.nmax):
+				for i in range(self.mesh.nx):
+					psi_in_sw = self._get_psi_south(0, n, g)
+					psi_in_se = self._get_psi_south(1, n, g)
+					# TODO: Check if the boundary condition is applied correctly!
+					psi_in_s = 0.5*(psi_in_sw + psi_in_se)
+					for j in reversed(range(self.mesh.ny)):
+						node = self.mesh.nodes[i, j]
+						q = self._get_source(i, j, g, k)
+						xcoeff = 2*mux/node.dx
+						ycoeff = 2*muy/node.dy
+						psi_bar = (q + xcoeff*psi_in_w + ycoeff*psi_in_s)/ \
+						          (node.sigma_tr[g] + xcoeff + ycoeff)
+						psi_out_e = 2*psi_bar - psi_in_w
+						psi_out_n = 2*psi_bar - psi_in_s
+						self.mesh.psi[i+1, j+1, n, g] = psi_out_e
+						self.mesh.psi[i, j, n, g] = psi_out_n
+						psi_in_w = psi_out_e
+						psi_in_s = psi_out_n
+			
+			# TODO: Add the two backward sweeps below.
+			
+			'''
+			# Backward sweep
+			for n in range(self.quad.N2, self.quad.N):
+				mu = abs(self.quad.mus[n])
+				psi_in = self._get_psi_east(n, g)
+				self.mesh.psi[-1, n, g] = psi_in
+				for i in range(self.mesh.nx):
+					node = self.mesh.nodes[-1 - i]
+					q = self._get_source(i, g, k)
+					psi_out = psi_in*(2*mu - node.dx*node.sigma_tr[g]) + 2*node.dx*q
+					psi_out /= 2*mu + node.dx*node.sigma_tr[g]
+					
+					self.mesh.psi[-2 - i, n, g] = psi_out
+					psi_in = psi_out
+				
+				# Reconnect that last pesky boundary flux
+				self.mesh.psi[0, n, g] = psi_out
+			'''
+			
+			# Update the scalar flux using the Diamond Difference approximation
+			#
+			# Interior nodes
+			for i in range(self.mesh.nx):
+				flux_i = 0.0
+				for n in range(self.quad.N):
+					w = self.quad.weights[n]
+					psi_plus = self.mesh.psi[i + 1, n, g]
+					psi_minus = self.mesh.psi[i, n, g]
+					flux_i += w*(psi_plus + psi_minus)/2.0
+				self.mesh.flux[i, g] = flux_i
+
