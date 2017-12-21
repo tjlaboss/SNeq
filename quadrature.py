@@ -3,6 +3,7 @@
 # Classes and data for quadrature sets
 
 from numpy.polynomial.legendre import leggauss
+import _level_symmetric
 
 
 class Quadrature(object):
@@ -48,3 +49,26 @@ class GaussLegendreQuadrature(Quadrature):
 		"""
 		return (self.N - 1) - n
 		
+		
+class LevelSymmetricQuadrature(Quadrature):
+	"""3-D quadrature set using the Level-Symmetric scheme
+	
+	Values are only available for up to S24.
+
+	Parameter:
+	----------
+	N:          int (multiple of 2); number of discrete angles
+	"""
+	def __init__(self, N):
+		super().__init__(N)
+		assert N <= 24, \
+			"Level-Symmetric Quadrature is only available for S2 through S24."
+		# Populate according to the LS set
+		sdict = _level_symmetric.LevelSymmetricQuadrature().getQuadratureSet(N)
+		self.muxs = sdict["mu"]
+		self.muys = sdict["eta"]
+		self.muzs = sdict["xi"]
+		self.weights = sdict["weight"]
+	
+	def reflect_angle(self, n):
+		raise NotImplementedError("Cannot reflect Level-Symmetric angles yet")
