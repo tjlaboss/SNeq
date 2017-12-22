@@ -97,6 +97,7 @@ class Mesh2D(Mesh):
 		self.nodes = np.empty((nx, ny), dtype=node.Node2D)
 		self.flux = np.ones((nx, ny, groups))
 		self.psi = np.zeros((nx + 1, ny, quad.Nflux, groups))
+		self.psj = np.zeros((nx, ny + 1, quad.Nflux, groups))
 		'''
 		self.psi_west = np.zeros((ny, quad.Nflux, groups))
 		self.psi_east = np.zeros((ny, quad.Nflux, groups))

@@ -23,9 +23,9 @@ SIGMA_A_H1 = 1.0        # b
 # --> fuel is pure scattering; only absorption is hydrogen
 
 # Define the nuclides
-u238 = material.Nuclide(238, {"scatter": SIGMA_S_U238})
-o16 = material.Nuclide(16, {"scatter": SIGMA_S_O16})
-h1 = material.Nuclide(1, {"scatter": SIGMA_S_H1,
+u238 = material.Nuclide(238, {"nu-scatter": SIGMA_S_U238})
+o16 = material.Nuclide(16, {"nu-scatter": SIGMA_S_O16})
+h1 = material.Nuclide(1, {"nu-scatter": SIGMA_S_H1,
                           "absorption": SIGMA_A_H1})
 # Define the constituent materials
 fuel_mat = material.Material().fromNuclides([u238], RHO_FUEL, name="Fuel")
@@ -35,6 +35,9 @@ mod_mat = material.Material().fromNuclides([o16, h1, h1], RHO_MOD, name="Moderat
 # Cell dimensions
 PITCH = 1.25            # cm; pin pitch
 WIDTH = 0.80            # cm; length of one side of the square fuel pin
+#debug
+PITCH = 18
+WIDTH = 9
 
 
 class Pincell2D(mesh.Mesh2D):
@@ -67,13 +70,20 @@ class Pincell2D(mesh.Mesh2D):
 		self.mod_xwidth = (PITCH - WIDTH)/2.0
 		self.fuel_ywidth = WIDTH
 		self.mod_ywidth = (PITCH - WIDTH)/2.0
-		# Ranges
-		self.mod0_lim0 = 0
-		self.mod0_lim1 = self.nx_mod - 1
-		self.fuel_lim0 = self.nx_mod
-		self.fuel_lim1 = self.nx_mod + self.nx_fuel - 1
-		self.mod1_lim0 = self.nx_mod + self.nx_fuel
-		self.mod1_lim1 = self.nx - 1
+		# X-Ranges
+		self.mod0_xlim0 = 0
+		self.mod0_xlim1 = self.nx_mod - 1
+		self.fuel_xlim0 = self.nx_mod
+		self.fuel_xlim1 = self.nx_mod + self.nx_fuel - 1
+		self.mod1_xlim0 = self.nx_mod + self.nx_fuel
+		self.mod1_xlim1 = self.nx - 1
+		# Y-Ranges
+		self.mod0_ylim0 = 0
+		self.mod0_ylim1 = self.ny_mod - 1
+		self.fuel_ylim0 = self.ny_mod
+		self.fuel_ylim1 = self.ny_mod + self.ny_fuel - 1
+		self.mod1_ylim0 = self.ny_mod + self.ny_fuel
+		self.mod1_ylim1 = self.nx - 1
 		# Remove the next four lines for non-uniform meshes in each region
 		self._dx_fuel = self.fuel_xwidth/self.nx_fuel
 		self._dy_fuel = self.fuel_ywidth/self.ny_fuel
@@ -94,22 +104,17 @@ class Pincell2D(mesh.Mesh2D):
 1-D Pincell Mesh
 ----------------
 Indices:
-	[{self.mod0_lim0}, {self.mod0_lim1}]: Moderator
-	[{self.fuel_lim0}, {self.fuel_lim1}]: Fuel
-	[{self.mod1_lim0}, {self.mod1_lim1}]: Moderator
+	[{self.mod0_xlim0}, {self.mod0_xlim1}]: Moderator
+	[{self.fuel_xlim0}, {self.fuel_xlim1}]: Fuel
+	[{self.mod1_xlim0}, {self.mod1_xlim1}]: Moderator
 """.format(**locals())
 		return rep
 	
 	def get_region(self, i, j):
-		if i <= self.mod0_lim1 or j <= self.mod0_lim0:
-			return 0
-		elif i <= self.fuel_lim1 and j <= self.fuel_lim1:
+		if self.mod0_xlim1 < i < self.mod1_xlim0 and self.mod0_ylim1 < j < self.mod1_ylim0:
 			return 1
-		elif i <= self.mod1_lim1 or j <= self.mod1_lim1:
-			return 2
 		else:
-			errstr = "Invalid index {} for mesh of size {}.".format(i, self.nx)
-			raise IndexError(errstr)
+			return 0
 	
 	def get_dxy(self, i, j):
 		k = self.get_region(i, j)
@@ -121,11 +126,13 @@ Indices:
 				region = self.get_region(i, j)
 				dx, dy = self.get_dxy(i, j)
 				if region == 1:
-					fuel_node = node.Node2D(dx, dy, self.quad, self.fuel.macro_xs, self.groups, FIXED_SOURCE)
-					self.nodes[i] = fuel_node
+					fuel_node = node.Node2D(dx, dy, self.quad, self.fuel.macro_xs,
+					                        self.groups, FIXED_SOURCE, name="Fuel")
+					self.nodes[i, j] = fuel_node
 				else:
-					mod_node = node.Node2D(dx, dy, self.quad, self.mod.macro_xs, self.groups)
-					self.nodes[i] = mod_node
+					mod_node = node.Node2D(dx, dy, self.quad, self.mod.macro_xs,
+					                       self.groups, name="Moderator")
+					self.nodes[i, j] = mod_node
 			
 	def calculate_fission_source(self):
 		return None
@@ -133,15 +140,19 @@ Indices:
 # test
 #BOUNDARIES = ["vacuum"]*4
 BOUNDARIES = ["reflective"]*4
-BOUNDARIES = ["vacuum", "reflective", "reflective", "reflective"]
+#BOUNDARIES = ["periodic"]*4
+#BOUNDARIES = ["reflective"]*2 + ["vacuum"]*2
+#BOUNDARIES = ["vacuum", "vacuum"] + ["reflective"]*2
+#BOUNDARIES = ["reflective"]*3 + ["vacuum"]
 NFUEL = 6
-NMOD = 0#5
-s4 = quadrature.LevelSymmetricQuadrature2D(2)
+NMOD = 3
+s4 = quadrature.LevelSymmetricQuadrature2D(4)
 cell = Pincell2D(s4, mod_mat, fuel_mat, NMOD, NFUEL, NMOD, NFUEL)
 solver = calculator.DiamondDifferenceCalculator2D(s4, cell, BOUNDARIES, kguess=None)
 #solver.transport_sweep(False)
-converged = solver.solve(eps=1E-6, maxiter=2000)
+converged = solver.solve(eps=1E-6, maxiter=121)
 phi = solver.mesh.flux[:,:,0]
 print(phi)
+converged=True
 if converged:
 	plot2d.plot_1group_flux(cell, True, nxmod=5)

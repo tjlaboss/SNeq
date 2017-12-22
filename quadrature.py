@@ -119,4 +119,12 @@ class LevelSymmetricQuadrature2D(Quadrature):
 			raise NotImplementedError(errstr.format(side))
 		return m % self.Nflux
 
-#LevelSymmetricQuadrature(16)
+# Test reflection
+if __name__ == "__main__":
+	g = LevelSymmetricQuadrature2D(4)
+	for side in EDGES:
+		for i in range(g.Nflux):
+			s = "{} side:\tAngle: {}\treflected -> {}"
+			j = g.reflect_angle(i, side)
+			print(s.format(side, i, j))
+		print()

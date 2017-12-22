@@ -1,7 +1,7 @@
 # Constants
 
 from scipy.constants import Avogadro as AVOGADRO
-REACTIONS = {"absorption", "nu-fission", "scatter"}
+REACTIONS = {"absorption", "nu-fission", "scatter", "nu-scatter"}
 BOUNDARY_CONDITIONS = {"periodic", "reflective", "vacuum"}
 EDGES = {"west", "north", "south", "east"}
 

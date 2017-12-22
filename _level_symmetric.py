@@ -258,7 +258,7 @@ class LevelSymmetricQuadrature(object):
 		n_angles = N2*(2*N2 + 2)
 		per_octant = n_angles // 4
 		
-		print("Generating level-symmetric quadrature with {} angles".format(n_angles))
+		#print("Generating level-symmetric quadrature with {} angles".format(n_angles))
 		
 		quad["mu"] = numpy.zeros(per_octant)
 		quad["eta"] = numpy.zeros(per_octant)
