@@ -13,7 +13,7 @@ def _setup_plot(problem, xvals, nxmod):
 	show()
 
 def plot_1group_flux(problem, normalize=False, nxmod = None):
-	phi = problem.flux[:,:,0].T
+	phi = array(problem.flux[:,:,0].T)
 	if normalize:
 		phi /= phi.mean()
 	hotplot = imshow(phi.squeeze(), interpolation = 'none', cmap = 'jet')

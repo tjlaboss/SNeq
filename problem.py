@@ -35,9 +35,6 @@ mod_mat = material.Material().fromNuclides([o16, h1, h1], RHO_MOD, name="Moderat
 # Cell dimensions
 PITCH = 1.25            # cm; pin pitch
 WIDTH = 0.80            # cm; length of one side of the square fuel pin
-#debug
-PITCH = 18
-WIDTH = 9
 
 
 class Pincell2D(mesh.Mesh2D):
@@ -139,18 +136,14 @@ Indices:
 
 # test
 #BOUNDARIES = ["vacuum"]*4
-BOUNDARIES = ["reflective"]*4
-#BOUNDARIES = ["periodic"]*4
-#BOUNDARIES = ["reflective"]*2 + ["vacuum"]*2
-#BOUNDARIES = ["vacuum", "vacuum"] + ["reflective"]*2
-#BOUNDARIES = ["reflective"]*3 + ["vacuum"]
-NFUEL = 6
-NMOD = 3
+BOUNDARIES = ["periodic"]*4
+NFUEL = 20
+NMOD = 10
 s4 = quadrature.LevelSymmetricQuadrature2D(4)
 cell = Pincell2D(s4, mod_mat, fuel_mat, NMOD, NFUEL, NMOD, NFUEL)
 solver = calculator.DiamondDifferenceCalculator2D(s4, cell, BOUNDARIES, kguess=None)
 #solver.transport_sweep(False)
-converged = solver.solve(eps=1E-6, maxiter=121)
+converged = solver.solve(eps=1E-6)
 phi = solver.mesh.flux[:,:,0]
 print(phi)
 converged=True

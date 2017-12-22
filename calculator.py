@@ -113,14 +113,14 @@ class DiamondDifferenceCalculator(object):
 			raise TypeError(errstr)
 		if nc == "periodic":
 			if nd == 2:
-				get_north = lambda i, n, g: self.mesh.psi[i, -1, n, g]
+				get_north = lambda i, n, g: self.mesh.psi_south[i, n, g]
 			else:
 				raise NotImplementedError("{}D".format(nd))
 		elif nc == "reflective":
 			if nd == 2:
 				def get_north(i, n, g):
 					m = self.quad.reflect_angle(n, "north")
-					return self.mesh.psi[i, 0, m, g]
+					return self.mesh.psi_north[i, m, g]
 			else:
 				raise NotImplementedError("{}D".format(nd))
 		elif nc == "vacuum":
@@ -134,14 +134,14 @@ class DiamondDifferenceCalculator(object):
 		
 		if sc == "periodic":
 			if nd == 2:
-				get_south = lambda i, n, g: self.mesh.psi[i, 0, n, g]
+				get_south = lambda i, n, g: self.mesh.psi_north[i, n, g]
 			else:
 				raise NotImplementedError("{}D".format(nd))
 		elif sc == "reflective":
 			if nd == 2:
 				def get_south(i, n, g):
 					m = self.quad.reflect_angle(n, "south")
-					return self.mesh.psi[i, -1, m, g]
+					return self.mesh.psi[i, m, g]
 			else:
 				raise NotImplementedError("{}D".format(nd))
 		elif sc == "vacuum":
@@ -436,6 +436,7 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 				self.mesh.psi[0, :, n, g] = np.array([self._get_psi_west(j, n, g) for j in range(self.mesh.ny)])
 				for i in range(self.mesh.nx):
 					psi_in_n = self._get_psi_north(i, n, g)
+					self.mesh.psi_north[i, n, g] = psi_in_n
 					for j in range(self.mesh.ny):
 						psi_in_w = self.mesh.psi[i, j, n, g]
 						node = self.mesh.nodes[i, j]
@@ -448,6 +449,7 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 						psi_out_s = 2*psi_bar - psi_in_n
 						self.mesh.psi[i+1, j, n, g] = psi_out_e
 						psi_in_n = psi_out_s
+					self.mesh.psi_south[i, n, g] = psi_out_s
 						
 			
 			# Backward sweep from the top right
@@ -455,9 +457,11 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 			for n in range(2*self.quad.npq, 3*self.quad.npq):
 				mux = abs(self.quad.muxs[n - 2*self.quad.npq])
 				muy = abs(self.quad.muys[n - 2*self.quad.npq])
-				self.mesh.psi[-1, :, n, g] = np.array([self._get_psi_east(j, n, g) for j in range(self.mesh.ny)])
+				self.mesh.psi[-1, :, n, g] = np.array(
+					[self._get_psi_east(j, n, g) for j in range(self.mesh.ny)])
 				for i in reversed(range(self.mesh.nx)):
 					psi_in_n = self._get_psi_north(i, n, g)
+					self.mesh.psi_north[i, n, g] = psi_in_n
 					for j in range(self.mesh.ny):
 						psi_in_e = self.mesh.psi[i+1, j, n, g]
 						node = self.mesh.nodes[i, j]
@@ -470,6 +474,7 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 						psi_out_s = 2*psi_bar - psi_in_n
 						self.mesh.psi[i, j, n, g] = psi_out_w
 						psi_in_n = psi_out_s
+					self.mesh.psi_south[i, n, g] = psi_out_s
 						
 			# Forward sweep from bottom left:
 			# +mux, +muy, npq -> 2*npq
@@ -480,6 +485,7 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 					[self._get_psi_west(j, n, g) for j in range(self.mesh.ny)])
 				for i in range(self.mesh.nx):
 					psi_in_s = self._get_psi_south(i, n, g)
+					self.mesh.psi_south[i, n, g] = psi_in_s
 					for j in reversed(range(self.mesh.ny)):
 						psi_in_w = self.mesh.psi[i, j, n, g]
 						node = self.mesh.nodes[i, j]
@@ -492,6 +498,7 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 						psi_out_n = 2*psi_bar - psi_in_s
 						self.mesh.psi[i + 1, j, n, g] = psi_out_e
 						psi_in_s = psi_out_n
+					self.mesh.psi_north[i, n, g] = psi_out_n
 			
 			# Backward sweep from bottom right:
 			# -mux, +muy, 3*npq -> 4*npq
@@ -501,6 +508,7 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 				self.mesh.psi[-1, :, n, g] = np.array([self._get_psi_east(j, n, g) for j in range(self.mesh.ny)])
 				for i in reversed(range(self.mesh.nx)):
 					psi_in_s = self._get_psi_south(i, n, g)
+					self.mesh.psi_south[i, n, g] = psi_in_s
 					for j in reversed(range(self.mesh.ny)):
 						psi_in_e = self.mesh.psi[i+1, j, n, g]
 						node = self.mesh.nodes[i, j]
@@ -513,6 +521,7 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 						psi_out_n = 2*psi_bar - psi_in_s
 						self.mesh.psi[i, j, n, g] = psi_out_w
 						psi_in_s = psi_out_n
+					self.mesh.psi_north[i, n, g] = psi_out_n
 			
 			# Update the scalar flux using the Diamond Difference approximation
 			for i in range(self.mesh.nx):
@@ -548,9 +557,9 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 			print("rms:", fluxdiff)
 			
 			# debug
-			#import plot2d
+			import plot2d
 			#if inner_count in range(10,30):
-			#	plot2d.plot_1group_flux(self.mesh, nxmod=self.mesh.nx_mod)
+			#plot2d.plot_1group_flux(self.mesh, True, nxmod=self.mesh.nx_mod)
 		
 		print("Solution converged after {} inner iterations.".format(inner_count))
 		return True
