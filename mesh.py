@@ -96,7 +96,13 @@ class Mesh2D(Mesh):
 		self.ywidth = ywidth
 		self.nodes = np.empty((nx, ny), dtype=node.Node2D)
 		self.flux = np.ones((nx, ny, groups))
-		self.psi = np.zeros((nx + 1, ny + 1, quad.Nflux, groups))
+		self.psi = np.zeros((nx + 1, ny, quad.Nflux, groups))
+		'''
+		self.psi_west = np.zeros((ny, quad.Nflux, groups))
+		self.psi_east = np.zeros((ny, quad.Nflux, groups))
+		self.psi_north = np.zeros((nx, quad.Nflux, groups))
+		self.psi_south = np.zeros((nx, quad.Nflux, groups))
+		'''
 	
 
 	def calculate_scatter_source(self):

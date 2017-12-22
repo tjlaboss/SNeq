@@ -3,6 +3,7 @@
 # Classes and data for quadrature sets
 
 from numpy.polynomial.legendre import leggauss
+from constants import EDGES
 import _level_symmetric
 
 
@@ -51,8 +52,8 @@ class GaussLegendreQuadrature(Quadrature):
 		return (self.N - 1) - n
 		
 		
-class LevelSymmetricQuadrature(Quadrature):
-	"""3-D quadrature set using the Level-Symmetric scheme
+class LevelSymmetricQuadrature2D(Quadrature):
+	"""2-D quadrature set using the Level-Symmetric scheme
 	
 	Values are only available for up to S24.
 	
@@ -84,6 +85,38 @@ class LevelSymmetricQuadrature(Quadrature):
 		self.npq = len(self.weights)  # number per quadrant
 		self.Nflux = 4*self.npq
 	
-	def reflect_angle(self, n):
-		raise NotImplementedError("Cannot reflect Level-Symmetric angles yet")
+	def reflect_angle(self, n, side):
+		"""Get the angular index corresponding to the outgoing flux
+		at a reflective boundary condition.
+		
+		Parameters:
+		-----------
+		n:          int; incoming angular flux index
+		side:       str; one of "south", "north", "east", "west"
+		
+		Returns:
+		--------
+		m:          int; outgoing angular flux index
+		"""
+		assert side in EDGES, \
+			"{} is not a valid side. Must be in: {}".format(side, EDGES)
+		index = n % self.npq
+		old_quad = n // self.npq
+		if side == "west":
+			# LHS edge: reflect (-mux -> +mux)
+			m = (old_quad - 2)*self.npq + index
+		elif side == "east":
+			# RHS edge: (+mux -> -mux)
+			m = (old_quad + 2)*self.npq + index
+		elif side == "north":
+			# (+mux -> -muy)
+			m = (old_quad - 1)*self.npq + index
+		elif side == "south":
+			# (-mux -> +muy)
+			m = (old_quad + 1)*self.npq + index
+		else:
+			errstr = "{} edge is not available in 2D."
+			raise NotImplementedError(errstr.format(side))
+		return m % self.Nflux
+
 #LevelSymmetricQuadrature(16)

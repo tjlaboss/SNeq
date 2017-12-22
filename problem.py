@@ -8,7 +8,7 @@ import mesh
 import quadrature
 import material
 import calculator
-import plot1d
+import plot2d
 
 FIXED_SOURCE = 1.0  # TODO: scale by 1, 2, 4pi?
 
@@ -131,18 +131,17 @@ Indices:
 		return None
 
 # test
-BOUNDARIES = ["vacuum"]*4
-NFUEL = 8
+#BOUNDARIES = ["vacuum"]*4
+BOUNDARIES = ["reflective"]*4
+BOUNDARIES = ["vacuum", "reflective", "reflective", "reflective"]
+NFUEL = 6
 NMOD = 0#5
-s4 = quadrature.LevelSymmetricQuadrature(4)
+s4 = quadrature.LevelSymmetricQuadrature2D(2)
 cell = Pincell2D(s4, mod_mat, fuel_mat, NMOD, NFUEL, NMOD, NFUEL)
 solver = calculator.DiamondDifferenceCalculator2D(s4, cell, BOUNDARIES, kguess=None)
-solver.transport_sweep(None)
-raise SystemExit
-#solver.solve(eps=1E-10)
-phi = solver.mesh.flux
+#solver.transport_sweep(False)
+converged = solver.solve(eps=1E-6, maxiter=2000)
+phi = solver.mesh.flux[:,:,0]
 print(phi)
-print(mod_mat.macro_xs)
-print(fuel_mat.macro_xs)
-if True:
-	plot1d.plot_1group_flux(cell, True, nxmod=5)
+if converged:
+	plot2d.plot_1group_flux(cell, True, nxmod=5)
