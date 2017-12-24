@@ -109,20 +109,24 @@ Indices:
 	
 	def get_region(self, i, j):
 		if self.mod0_xlim1 < i < self.mod1_xlim0 and self.mod0_ylim1 < j < self.mod1_ylim0:
-			return 1
+			return 1, 1
+		elif self.mod0_xlim1 < i < self.mod1_xlim0:
+			return 1, 0
+		elif self.mod0_ylim1 < j < self.mod1_ylim0:
+			return 0, 1
 		else:
-			return 0
+			return 0, 0
 	
 	def get_dxy(self, i, j):
-		k = self.get_region(i, j)
-		return self._dxs[k], self._dys[k]
+		kx, ky = self.get_region(i, j)
+		return self._dxs[kx], self._dys[ky]
 	
 	def _populate(self):
 		for i in range(self.nx):
 			for j in range(self.ny):
 				region = self.get_region(i, j)
 				dx, dy = self.get_dxy(i, j)
-				if region == 1:
+				if region == (1, 1):
 					fuel_node = node.Node2D(dx, dy, self.quad, self.fuel.macro_xs,
 					                        self.groups, FIXED_SOURCE, name="Fuel")
 					self.nodes[i, j] = fuel_node
@@ -136,16 +140,23 @@ Indices:
 
 # test
 #BOUNDARIES = ["vacuum"]*4
-BOUNDARIES = ["periodic"]*4
-NFUEL = 20
-NMOD = 10
+#BOUNDARIES = ["periodic"]*4
+BOUNDARIES = ["reflective"]*2 + ["periodic"]*2
+#BOUNDARIES = ["periodic"]*2 + ["reflective"]*2
+#BOUNDARIES = ["reflective"]*4
+NFUEL = 12
+NMOD = 4
 s4 = quadrature.LevelSymmetricQuadrature2D(4)
 cell = Pincell2D(s4, mod_mat, fuel_mat, NMOD, NFUEL, NMOD, NFUEL)
 solver = calculator.DiamondDifferenceCalculator2D(s4, cell, BOUNDARIES, kguess=None)
 #solver.transport_sweep(False)
-converged = solver.solve(eps=1E-6)
+import time
+t1 = time.clock()
+converged = solver.solve(eps=1E-5)
+t2 = time.clock()
 phi = solver.mesh.flux[:,:,0]
 print(phi)
+print(t2 - t1, "seconds") #8.754909
 converged=True
 if converged:
 	plot2d.plot_1group_flux(cell, True, nxmod=5)

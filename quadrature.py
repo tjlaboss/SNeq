@@ -60,8 +60,8 @@ class LevelSymmetricQuadrature2D(Quadrature):
 	Indexing for reflection uses the following scheme:
 		0 -> npq:       +mux, -muy
 		npq -> 2*npq:   +mux, +muy
-		2*npq -> 3*npq: -mux, -muy
-		3*npq -> 4*npq: -mux, +muy
+		2*npq -> 3*npq: -mux, +muy
+		3*npq -> 4*npq: -mux, -muy
 
 	Parameter:
 	----------
@@ -101,23 +101,85 @@ class LevelSymmetricQuadrature2D(Quadrature):
 		assert side in EDGES, \
 			"{} is not a valid side. Must be in: {}".format(side, EDGES)
 		index = n % self.npq
-		old_quad = n // self.npq
+		quad_in = n // self.npq
 		if side == "west":
 			# LHS edge: reflect (-mux -> +mux)
-			m = (old_quad - 2)*self.npq + index
+			assert quad_in in (2, 3)
+			if quad_in == 2:
+				m = n - self.npq
+			else:
+				m = n + self.npq
 		elif side == "east":
 			# RHS edge: (+mux -> -mux)
-			m = (old_quad + 2)*self.npq + index
+			assert quad_in in (0, 1)
+			if quad_in == 1:
+				m = n + self.npq
+			else:
+				m = n - self.npq
 		elif side == "north":
 			# (+mux -> -muy)
-			m = (old_quad - 1)*self.npq + index
+			assert quad_in in (1, 2)
+			if quad_in == 2:
+				m = n + self.npq
+			else:
+				m = n - self.npq
 		elif side == "south":
 			# (-mux -> +muy)
-			m = (old_quad + 1)*self.npq + index
+			assert quad_in in (0, 3)
+			if quad_in >= 2:
+				m = n - self.npq
+			else:
+				m = n + self.npq
 		else:
 			errstr = "{} edge is not available in 2D."
 			raise NotImplementedError(errstr.format(side))
 		return m % self.Nflux
+	
+	def inverse_reflect_angle(self, m, side):
+		"""The inverse of self.reflect_angle()
+		
+		Parameters:
+		-----------
+		m:          int; outgoing angular flux index
+		side:       str; one of "south", "north", "east", "west"
+		
+		Returns:
+		--------
+		n:          int; incoming angular flux index
+		"""
+		assert side in EDGES, \
+			"{} is not a valid side. Must be in: {}".format(side, EDGES)
+		quad_out = m // self.npq
+		if side == "west":
+			assert quad_out in (0, 1)
+			if quad_out == 0:
+				n = m - self.npq
+			else:
+				n = m + self.npq
+		elif side == "east":
+			assert quad_out in (2, 3)
+			if quad_out == 2:
+				n = m - self.npq
+			else:
+				n = m + self.npq
+		elif side == "north":
+			assert quad_out in (0, 3)
+			if quad_out == 0:
+				n = m + self.npq
+			else:
+				n = m - self.npq
+		elif side == "south":
+			assert quad_out in (1, 2)
+			if quad_out == 1:
+				n = m - self.npq
+			else:
+				n = m + self.npq
+		else:
+			errstr = "{} edge is not available in 2D."
+			raise NotImplementedError(errstr.format(side))
+		return n % self.Nflux
+		
+	
 
 # Test reflection
 if __name__ == "__main__":
@@ -125,6 +187,13 @@ if __name__ == "__main__":
 	for side in EDGES:
 		for i in range(g.Nflux):
 			s = "{} side:\tAngle: {}\treflected -> {}"
-			j = g.reflect_angle(i, side)
-			print(s.format(side, i, j))
+			try:
+				j = g.reflect_angle(i, side)
+				k = g.inverse_reflect_angle(j, side)
+				if k != i:
+					print("Reflection error! Predicted incoming =", k)
+			except AssertionError:
+				pass
+			else:
+				print(s.format(side, i, j))
 		print()
