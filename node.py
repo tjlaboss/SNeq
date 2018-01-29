@@ -144,8 +144,18 @@ class Node2D(Node):
 						[Default: 1]
 	name:               str; descriptive name for the node
 						[Default: empty string]
+	
+	Attributes:
+	-----------
+	dx
+	dy
+	quad
+	name
+	sigma_a, nu_sigma_f, sigma_s, sigma_tr
+	area:               float, cm^2; Node x-y area
 	"""
 	def __init__(self, dx, dy, quad, cross_sections, groups, source=0.0, name=""):
 		super().__init__(dx, dy, None, quad, cross_sections, groups, source, name)
+		self.area = dx*dy
 		# TODO: Add optical thickness attributes
 		# TODO: Precalculate flux coefficients

@@ -396,18 +396,6 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 		return source
 	
 	def l2norm2d(self, new_array, old_array):
-		diff = 0.0
-		'''
-		for i in range(self.mesh.nx):
-			for j in range(self.mesh.ny):
-				for g in range(self.mesh.groups):
-					# Calculate the flux difference
-					f1 = new_array[i, j, g]
-					f0 = old_array[i, j, g]
-					if f1 > 0:# != f0:
-						diff += ((f1 - f0)/f1)**2
-		rms = np.sqrt(diff/self.mesh.nx/self.mesh.ny)
-		#'''
 		rms = np.sqrt(( ((new_array - old_array)/new_array)**2 ).sum()/self.mesh.nx/self.mesh.ny)
 		return rms
 	
@@ -537,6 +525,8 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 			# Update the scalar flux using the Diamond Difference approximation
 			for i in range(self.mesh.nx):
 				for j in range(self.mesh.ny):
+					#node = self.mesh.nodes[i, j]
+					#v = node.area / self.mesh.area
 					flux_i = 0.0
 					for n in range(self.quad.Nflux):
 						# FIXME: Not sure which level index is correct.
@@ -557,8 +547,6 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 		ssdiff = 1 + eps
 		while ssdiff > eps:
 			old_source = np.array(self.scatter_source)
-			inner_count = 0
-			fluxdiff = eps + 1
 			fluxdiff = self.transport_sweep(self.k)
 			'''
 			while fluxdiff > eps:
@@ -575,10 +563,6 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 			
 			print("Converged after {} inner iterations.".format(inner_count))
 			'''
-			# debug
-			#import plot2d
-			# if inner_count in range(10,30):
-			#plot2d.plot_1group_flux(self.mesh, True, nxmod=self.mesh.nx_mod)
 			
 			outer_count += 1
 			if outer_count >= maxiter:

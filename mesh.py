@@ -86,7 +86,7 @@ class Mesh2D(Mesh):
 
 	Attributes:
 	-----------
-
+	area:           float, cm^2; total area of the mesh
 	"""
 	def __init__(self, quad, xwidth, ywidth, nx, ny, groups):
 		super().__init__(2, quad, [xwidth, ywidth], [nx, ny], groups)
@@ -94,6 +94,7 @@ class Mesh2D(Mesh):
 		self.ny = ny
 		self.xwidth = xwidth
 		self.ywidth = ywidth
+		self.area = xwidth*ywidth
 		self.nodes = np.empty((nx, ny), dtype=node.Node2D)
 		self.flux = np.ones((nx, ny, groups))
 		# Overall angular flux: Will eventually be removed.
