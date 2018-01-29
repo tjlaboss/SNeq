@@ -559,6 +559,8 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 			old_source = np.array(self.scatter_source)
 			inner_count = 0
 			fluxdiff = eps + 1
+			fluxdiff = self.transport_sweep(self.k)
+			'''
 			while fluxdiff > eps:
 				fluxdiff = self.transport_sweep(self.k)
 				# Inner: converge the flux
@@ -570,9 +572,9 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 					return False
 				
 				print("rms:", fluxdiff)
-				
-				
+			
 			print("Converged after {} inner iterations.".format(inner_count))
+			'''
 			# debug
 			#import plot2d
 			# if inner_count in range(10,30):

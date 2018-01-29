@@ -29,8 +29,11 @@ h1 = material.Nuclide(1, {"nu-scatter": SIGMA_S_H1,
                           "absorption": SIGMA_A_H1})
 # Define the constituent materials
 fuel_mat = material.Material().fromNuclides([u238], RHO_FUEL, name="Fuel")
+fuel_mat.macro_xs["transport"] = sum(fuel_mat.macro_xs.values())
 mod_mat = material.Material().fromNuclides([o16, h1, h1], RHO_MOD, name="Moderator")
-
+#for xs in mod_mat.macro_xs:
+#	mod_mat.macro_xs[xs] = 0.5*fuel_mat.macro_xs[xs]
+mod_mat.macro_xs["transport"] = sum(mod_mat.macro_xs.values())
 
 # Cell dimensions
 PITCH = 1.25            # cm; pin pitch
@@ -140,14 +143,24 @@ Indices:
 
 # test
 #BOUNDARIES = ["vacuum"]*4
-#BOUNDARIES = ["periodic"]*4
-BOUNDARIES = ["reflective"]*2 + ["periodic"]*2
+BOUNDARIES = ["periodic"]*4
+#BOUNDARIES = ["reflective"]*2 + ["periodic"]*2
 #BOUNDARIES = ["periodic"]*2 + ["reflective"]*2
 #BOUNDARIES = ["reflective"]*4
-NFUEL = 12
-NMOD = 4
-s4 = quadrature.LevelSymmetricQuadrature2D(4)
+NFUEL = 12*3
+NMOD = 4*3
+s4 = quadrature.LevelSymmetricQuadrature2D(16)
 cell = Pincell2D(s4, mod_mat, fuel_mat, NMOD, NFUEL, NMOD, NFUEL)
+print(cell._dxs)
+
+import numpy as np
+ntot = NFUEL+NMOD
+q_over_sigma = np.empty((NFUEL+NMOD, NFUEL+NMOD))
+for i in range(ntot):
+	for j in range(ntot):
+		node = cell.nodes[i, j]
+		q_over_sigma[i, j] = node.source / node.sigma_tr[0]
+
 solver = calculator.DiamondDifferenceCalculator2D(s4, cell, BOUNDARIES, kguess=None)
 #solver.transport_sweep(False)
 import time
