@@ -39,7 +39,7 @@ def _group_cross_sections_from_dict(cross_sections, groups):
 	if "transport" in cross_sections:
 		sigma_tr = cross_sections["transport"]
 	else:
-		print("Warning: Transport cross section unavailable; using Total.")
+		#print("Warning: Transport cross section unavailable; using Total.")
 		if "total" in cross_sections:
 			sigma_tr = cross_sections["total"]
 		else:
@@ -47,8 +47,8 @@ def _group_cross_sections_from_dict(cross_sections, groups):
 	return sigma_a, sigma_s, scatter_matrix, nu_sigma_f, chi, sigma_tr
 
 
-class Node1D(object):
-	"""One-group, 1-D material node with constant properties
+class Node(object):
+	"""Generic Cartesian node with constant cross sections
 	
 	Parameters:
 	-----------
@@ -73,10 +73,11 @@ class Node1D(object):
 	sigma_tr
 	flux:               scalar flux in the node per energy group
 	"""
-	def __init__(self, dx, quad, cross_sections, groups, source=0.0, name=""):
+	def __init__(self, dx, dy, dz, quad, cross_sections, groups, source=0.0, name=""):
 		self.dx = dx
-		self.quad = quad
-		self._source = source
+		self.dy = dy
+		self.dz = dz
+		self.source = source
 		self._groups = groups
 		self.name = name
 		
@@ -84,27 +85,6 @@ class Node1D(object):
 		self.nu_sigma_f, self.chi, self.sigma_tr = \
 			_group_cross_sections_from_dict(cross_sections, groups)
 		
-		# node.flux should be deprecated
-		'''
-		self.flux = np.zeros(groups)
-		for g in range(groups):
-			if self.sigma_tr[g] < self.sigma_s[g]:
-				self.flux[g] = source/(self.sigma_tr[g] - self.sigma_s[g])
-			else:
-				self.flux[g] = source
-		'''
-		self.flux = None
-		
-		# Precalcuate a commonly-used term
-		N = self.quad.N
-		self._flux_coeffs = np.empty((N, groups))
-		self._flux_denoms = np.empty((N, groups))
-		for n in range(N):
-			two_mu = 2*abs(self.quad.mus[n])
-			for g in range(groups):
-				prod = dx*self.sigma_tr[g]
-				self._flux_coeffs[n, g] = two_mu - prod
-				self._flux_denoms[n, g] = two_mu + prod
 	
 	def __str__(self):
 		rep = """\
@@ -116,82 +96,66 @@ Node: {self.name}
 	dx:       {self.dx} cm
 		""".format(**locals())
 		return rep
-	
-	# All the node methods have been deprecated
-	# in favor of vector operations at the mesh level
-	'''
-	def _get_source(self, g, k):
-		"""Get the average nodal source, which is not to be confused with
-		the the external source.
-		
-		Should now include fission source and scattering sources
-		
-		Parameters:
-		-----------
-		g:          int; index of the energy group
-		k:          float; eigenvalue
-		"""
-		# If no chi distribution is given, put all of the fission source
-		# into the fastest group
-		fission = self.get_fission_source(g, k)
-		# Evaluate the scatter matrix
-		# maybe scattering source is what's screwing up ther problem?
-		#scatter = 0
-		scatter = (self.scatter_matrix*self.flux)[g]
-		"""
-		# TODO: Check whether this is correct
-		if self.scatter_matrix:
-			scatter = (self.scatter_matrix*self.flux)[g]
-		else:
-			scatter = self.sigma_s[g]*self.flux[g]
-		"""
-		qbar = 0.5*(scatter + fission + self._source)
-		return qbar
-	
-	
-	def get_fission_source(self, g, k):
-		fission = 0.0
-		if self.nu_sigma_f:
-			for gp in range(self._groups):
-				if not self.chi:
-					if g == self._groups - 1:
-						fission += self.flux[gp]*self.nu_sigma_f[gp]
-				else:
-					fission += self.chi[g]*self.flux[gp]*self.nu_sigma_f[gp]
-			fission /= k
-		return fission
-	
-	def flux_out(self, flux_in, n, g, k=None):
-		"""Calculate the flux leaving the node
-		
-		Parameters:
-		-----------
-		flux_in:        float; magnitude of the angular flux entering the node.
-						(That's psi[i-1/2] in to get psi[i+1/2] out, or
-						 That's psi[i+1/2] in to get psi[i-1/2] out.)
-		n:              int; index of the discrete angle
-		g:              int; index of the energy group
-		k:              float; eigenvalue. Required if the node a
-						non-zero nu_sigma_f (fission source).
-						[Default: None]
-		
-		Returns:
-		--------
-		flux_out:   float; magnitude of the angular flux leaving the node.
-		"""
-		coeff = self._flux_coeffs[n, g]
-		denom = self._flux_denoms[n, g]
-		qbar = self._get_source(g, k)
-		flux_out = (flux_in*coeff + 2*self.dx*qbar)/denom
-		return flux_out
-		'''
 
-# test
-if __name__ == "__main__":
-	import quadrature
-	sn6 = quadrature.GaussLegendreQuadrature(6)
-	xs = {"scatter": np.array([2.0, 2.1]),
-	      "absorption": np.array([0.0, 0.1])}
-	nod = Node1D(0.1, sn6, xs, source=10.0, name="test node")
-	fo = nod.flux_out(1.0, 3, 0)
-	print(nod)
+
+class Node1D(Node):
+	"""1-D node with constant cross sections
+
+	Parameters:
+	-----------
+	dx:                 float, cm; Node width
+	quad:               Quadrature; 1D angular quadrature to use
+	cross_sections:     dict of {"reaction" : macro_xs}
+	source:             float; external source strength.
+						[Default: 0]
+	groups:             int; number of energy groups
+						[Default: 1]
+	name:               str; descriptive name for the node
+						[Default: empty string]
+	"""
+	def __init__(self, dx, quad, cross_sections, groups, source=0.0, name=""):
+		super().__init__(dx, None, None, quad, cross_sections, groups, source, name)
+		# Precalcuate commonly-used terms
+		N = quad.N
+		self._flux_coeffs = np.empty((N, groups))
+		self._flux_denoms = np.empty((N, groups))
+		for n in range(N):
+			two_mu = 2*abs(quad.mus[n])
+			for g in range(groups):
+				prod = dx*self.sigma_tr[g]
+				self._flux_coeffs[n, g] = two_mu - prod
+				self._flux_denoms[n, g] = two_mu + prod
+		# TODO: Add optical thickness attributes
+		
+			
+
+class Node2D(Node):
+	"""2-D node with constant cross sections
+
+	Parameters:
+	-----------
+	dx:                 float, cm; Node width
+	dy:                 float, cm; Node depth
+	quad:               Quadrature; 2D or 3D angular quadrature to use
+	cross_sections:     dict of {"reaction" : macro_xs}
+	source:             float; external source strength.
+						[Default: 0]
+	groups:             int; number of energy groups
+						[Default: 1]
+	name:               str; descriptive name for the node
+						[Default: empty string]
+	
+	Attributes:
+	-----------
+	dx
+	dy
+	quad
+	name
+	sigma_a, nu_sigma_f, sigma_s, sigma_tr
+	area:               float, cm^2; Node x-y area
+	"""
+	def __init__(self, dx, dy, quad, cross_sections, groups, source=0.0, name=""):
+		super().__init__(dx, dy, None, quad, cross_sections, groups, source, name)
+		self.area = dx*dy
+		# TODO: Add optical thickness attributes
+		# TODO: Precalculate flux coefficients

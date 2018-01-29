@@ -9,19 +9,19 @@ import quadrature
 import material
 import calculator
 import plot1d
-from numpy import array
+import numpy as np
 
 FIXED_SOURCE = 1.0  # TODO: scale by 1, 2, 4pi?
 
 
 # Define the constituent materials
 fuel_mat = material.Material(groups=1)
-fuel_mat.macro_xs = {'scatter': array([1.0]),
-                     'absorption': array([0.1])}
+fuel_mat.macro_xs = {'scatter': np.array([1.0]),
+                     'absorption': np.array([0.1])}
 
 mod_mat = material.Material(groups=1)
-mod_mat.macro_xs = {'absorption': array([0.1]),
-                     'scatter': array([10.0])}
+mod_mat.macro_xs = {'absorption': np.array([0.1]),
+                     'scatter': np.array([10.0])}
 
 # Cell dimensions
 PITCH = 0.6  # cm; pin pitch
@@ -100,20 +100,27 @@ Indices:
 			region = self.get_region(i)
 			dx = self.get_dx(i)
 			if region == 1:
-				fuel_node = node.Node1D(dx, self.quad, self.fuel.macro_xs, FIXED_SOURCE)
+				fuel_node = node.Node1D(dx, self.quad, self.fuel.macro_xs, 1, FIXED_SOURCE)
 				self.nodes[i] = fuel_node
 			else:
-				mod_node = node.Node1D(dx, self.quad, self.mod.macro_xs)
+				mod_node = node.Node1D(dx, self.quad, self.mod.macro_xs, 1)
 				self.nodes[i] = mod_node
+	
+	def calculate_fission_source(self):
+		return 0
+	
+		
 
 
 # test
 s2 = quadrature.GaussLegendreQuadrature(8)
 NXMOD = 10
 NXFUEL = 8
+#BOUNDARIES = ("vacuum", "vacuum")
+BOUNDARIES = ("reflective", "reflective")
 cell = Pincell1D(s2, mod_mat, fuel_mat, nx_mod=NXMOD, nx_fuel=NXFUEL)
-solver = calculator.DiamondDifferenceCalculator1D(s2, cell, ("vacuum", "vacuum"))
-solver.transport_sweep()
+solver = calculator.DiamondDifferenceCalculator1D(s2, cell, BOUNDARIES, kguess=None)
+#solver.transport_sweep(k=None)
 solver.solve(eps=1E-5, maxiter=1000)
 phi = solver.mesh.flux
 print(cell)
