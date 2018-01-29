@@ -218,7 +218,7 @@ class FiniteDifference1D(Accelerator):
 				dhatr =  -(jplus + dsquigr*(phir - phic))/(phir + phic)
 				
 				# Matrix entries
-				l = +(dhatl - dsquigr)/cmidx
+				l = +(dhatl - dsquigl)/cmidx
 				c = node.sigma_tr[g] + (dhatl - dhatr + dsquigl + dsquigr)/cmidx
 				r = -(dhatr + dsquigr)/cmidx
 				matA[i0 + cmi, (i0+cmi-1):(i0+cmi+2)] = [l, c, r]

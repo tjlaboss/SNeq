@@ -88,7 +88,10 @@ class Material(object):
 		elif "scatter" in macro_xs:
 			scatter_matrix = macro_xs["scatter"]
 		total_scatter = scatter_matrix.sum(axis=0)
-		selfscatter = scatter_matrix.diagonal()
+		if self.groups > 1:
+			selfscatter = scatter_matrix.diagonal()
+		else:
+			selfscatter = scatter_matrix[0]
 		if "nu-fission" in macro_xs:
 			nu_sigma_f = macro_xs["nu-fission"]
 		if "chi" in macro_xs:

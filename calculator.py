@@ -207,8 +207,8 @@ class DiamondDifferenceCalculator1D(object):
 				# Converge the acceleration flux
 				self.accelerator.solve(old_flux, self.fission_source, self.k, 1E-4)
 				# Update our fine mesh solution from the coarse mesh
-				# coarse_flux = self.accelerator.coarse_mesh.flux
 				self.accelerator.prolong()
+				#fs = self.mesh.calculate_fission_source()
 				
 				print("Flux after acceleration:")
 				print(self.mesh.flux)

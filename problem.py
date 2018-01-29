@@ -108,10 +108,10 @@ Indices:
 			region = self.get_region(i)
 			dx = self.get_dx(i)
 			if region == 1:
-				fuel_node = node.Node1D(dx, self.quad, self.fuel.macro_xs, FIXED_SOURCE)
+				fuel_node = node.Node1D(dx, self.quad, self.fuel, FIXED_SOURCE)
 				self.nodes[i] = fuel_node
 			else:
-				mod_node = node.Node1D(dx, self.quad, self.mod.macro_xs)
+				mod_node = node.Node1D(dx, self.quad, self.mod)
 				self.nodes[i] = mod_node
 
 
