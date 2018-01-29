@@ -153,12 +153,24 @@ class RebalanceAccelerator1D(Accelerator):
 
 
 class FiniteDifference1D(Accelerator):
-	"""An Accelerator for the 1-D CMFD method"""
-	def __init__(self, coarse_mesh, fine_mesh):
+	"""An Accelerator for the 1-D CMFD method
+	
+	Parameters:
+	-----------
+	
+	coarse_mesh:    Pincell1D; coarse mesh to solve the problem on
+	fine_mesh:      Pincell1D; original fine (transport) mesh to solve on
+	damping:        float; damping factor, 1 is no damping
+	                [Defaut: 1.0]
+	"""
+	def __init__(self, coarse_mesh, fine_mesh, damping=1.0):
 		super().__init__(coarse_mesh, fine_mesh)
+		self._l = damping
 		
 		# Define the first set of coupling coefficients on the mesh
 		self.dtildes = scipy.zeros((2, self.coarse_mesh.nx, self.coarse_mesh.groups))
+		self.old_dhatls = scipy.zeros((self.coarse_mesh.nx, 2))
+		self.old_dhatrs = scipy.zeros((self.coarse_mesh.nx, 2))
 		for g in range(self.coarse_mesh.groups):
 			# Interior nodes
 			for i in range(1, self.coarse_mesh.nx - 1):
@@ -214,8 +226,13 @@ class FiniteDifference1D(Accelerator):
 				# Coupling coefficients
 				dsquigl = self.dtildes[0, cmi, g]
 				dsquigr = self.dtildes[1, cmi, g]
+				
 				dhatl = -(jminus + dsquigl*(phil - phic))/(phil + phic)
 				dhatr =  -(jplus + dsquigr*(phir - phic))/(phir + phic)
+				self.old_dhatls[cmi, g] = dhatl
+				self.old_dhatrs[cmi, g] = dhatr
+				dhatl = self._l*dhatl + (1 - self._l)*self.old_dhatls[cmi, g]
+				dhatr = self._l*dhatr + (1 - self._l)*self.old_dhatrs[cmi, g]
 				
 				# Matrix entries
 				l = +(dhatl - dsquigl)/cmidx
@@ -235,6 +252,12 @@ class FiniteDifference1D(Accelerator):
 				jplus =  -self.coarse_mesh.currents[0, 0, g]
 				jminus = -self.coarse_mesh.currents[1, 1, g]
 				dhatr = -(jplus + dsquigr*(phir - phic))/(phir + phic)
+				
+				#
+				self.old_dhatrs[cmi, g] = dhatr
+				dhatr = self._l*dhatr + (1 - self._l)*self.old_dhatrs[cmi, g]
+				
+				
 				# Matrix entries...TODO: Check the signs of these terms!
 				c = (dsquigr + dhatr)/cmidx + node.sigma_tr[g]
 				r = (dsquigr - dhatr)/cmidx
@@ -263,6 +286,12 @@ class FiniteDifference1D(Accelerator):
 				jplus = -self.coarse_mesh.currents[0, -2, g]
 				jminus = -self.coarse_mesh.currents[1, -1, g]
 				dhatl = -(jminus + dsquigl*(phil - phic))/(phil + phic)
+				
+				#
+				self.old_dhatls[cmi, g] = dhatl
+				dhatl = self._l*dhatl + (1 - self._l)*self.old_dhatls[cmi, g]
+				
+				
 				# Matrix entries
 				l = (dsquigl - dhatl)/cmidx
 				c = (dsquigl + dhatl)/cmidx + node.sigma_tr[g]
@@ -270,7 +299,7 @@ class FiniteDifference1D(Accelerator):
 			else:
 				raise NotImplementedError(bcr)
 			matA[i0+NX-1, (i0+NX-2):(i0+NX)] = [l, c]
-			
+		
 		return matA
 	
 	def _build_matrix_b(self, flux, k):
@@ -292,7 +321,7 @@ class FiniteDifference1D(Accelerator):
 				matB[i0 + cmi] = fsi
 		return matB
 			
-	def solve(self, ss, fs, k, eps):
+	def solve(self, ss, fs, k, eps, maxiter=1000):
 		G = self.coarse_mesh.groups
 		NX = self.coarse_mesh.nx
 		NC = NX*G
@@ -304,7 +333,7 @@ class FiniteDifference1D(Accelerator):
 		outer_count = 0
 		oldS = self._build_matrix_b(old_flux, 1)
 		oldk = k
-		while ((fsdiff > 1E-5) or (kdiff > 1E-5)) and (outer_count < 1000):
+		while ((fsdiff > eps) or (kdiff > eps)) and (outer_count < maxiter):
 			matA = self._build_matrix_a(old_flux)
 			matB = self._build_matrix_b(old_flux, oldk)
 			fluxdiff = 1
@@ -325,7 +354,7 @@ class FiniteDifference1D(Accelerator):
 				
 				old_flux = scipy.array(flux)
 				inner_count += 1
-				if inner_count >= 1000:
+				if inner_count >= maxiter:
 					raise SystemError("Maximum inner iterations reached")
 				
 			#print("Diffusion converged after {} inner iterations.".format(inner_count))
@@ -348,7 +377,7 @@ class FiniteDifference1D(Accelerator):
 			oldS = scipy.array(newS)
 			oldk = k
 			
-			if outer_count >= 1000:
+			if outer_count >= maxiter:
 				raise SystemError("Maximum inner iterations reached")
 		
 		print("Diffusion converged after {} outer iterations.".format(outer_count))

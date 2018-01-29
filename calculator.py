@@ -173,56 +173,43 @@ class DiamondDifferenceCalculator1D(object):
 		fsdiff = eps + 1
 		kdiff = eps + 1
 		outer_count = 0
+		self.factor_by_iter = []
+		self.rms_transport = []
 		# Outer: converge the fission source
 		while fsdiff > eps or kdiff > eps:
 			print("kguess = {}".format(self.k))
-			inner_count = 0
-			fluxdiff = eps + 1
-			while fluxdiff > eps:
-				
-				# TODO: Figure out if this is the right place to put the acceleration method
-				
-				fs, fsdiff, fluxdiff = self.transport_sweep(self.k)
-				# Inner: converge the flux
-				# Find the relative difference in flux using the L2 engineering norm
-				print("RMS (Transport): ", fluxdiff)
-				
-				inner_count += 1
-				if inner_count >= maxiter:
-					errstr = "Solution did NOT converge after {} inner iterations; aborting."
-					warn(errstr.format(inner_count))
-					return False
-			
+			fs, fsdiff, fluxdiff = self.transport_sweep(self.k)
+			# Inner: converge the flux
+			# Find the relative difference in flux using the L2 engineering norm
+			print("RMS (Transport): ", fluxdiff)
+			self.rms_transport.append(fluxdiff)
 			outer_count += 1
-			print("Outer Iteration {}: flux converged at kguess = {}".format(outer_count, self.k))
-			print(self.mesh.flux)
 			
 			if self.accelerator:
-				print("Flux before acceleration:")
-				print(self.mesh.flux)
+				#print("Flux before acceleration:")
+				#print(self.mesh.flux)
 				
 				old_flux = np.array(self.mesh.flux)
 				# Update the accleration method with the fine mesh fluxes
 				self.accelerator.restrict_flux(self.mesh)
 				# Converge the acceleration flux
-				self.accelerator.solve(old_flux, self.fission_source, self.k, 1E-4)
+				self.accelerator.solve(old_flux, self.fission_source, self.k, eps)
 				# Update our fine mesh solution from the coarse mesh
 				self.accelerator.prolong()
-				#fs = self.mesh.calculate_fission_source()
+				self.factor_by_iter.append(abs(self.accelerator.coarse_mesh.factor - 1))
+				fs = self.mesh.calculate_fission_source()
 				
-				print("Flux after acceleration:")
-				print(self.mesh.flux)
+				#print("Flux after acceleration:")
+				#print(self.mesh.flux)
 				rms_new_flux = self._l2norm(self.mesh.flux, old_flux)
-				print("RMS (CMFD): ", rms_new_flux)
+				print("RMS (CMFD):      ", rms_new_flux)
 			
 			# Now that flux has been converged, guess a new k
 			# and update the fission source
 			# Also find the relative difference in k
-			print(self.fission_source, "->", fs)
 			ss = self.mesh.calculate_scatter_source()
 			k_new = self.k*fs.sum()/self.fission_source.sum()
 			kdiff = abs(k_new - self.k)/k_new
-			# k_new = (fs.sum() + ss.sum())/(self.fission_source.sum()/self.k + self.scatter_source.sum())
 			print("k: {}\tkdiff: {}".format(k_new, kdiff))
 			self.fission_source = fs
 			self.scatter_source = ss

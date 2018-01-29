@@ -14,6 +14,7 @@ class FiniteDifferencePincell1D(CoarseMeshPincell1D):
 		if not ((quad is None) or (groups is None) or (ratio is None)):
 			super().__init__(quad, mod, fuel, pitch, width, nx_mod, nx_fuel, groups, source, ratio)
 			self._restricted_flux = None  # fine flux on coarse mesh before CMFD
+		self.factor = None
 			
 
 	def fromFineMesh(self, fine_mesh, ratio):
@@ -48,6 +49,7 @@ class FiniteDifferencePincell1D(CoarseMeshPincell1D):
 		# debug: normalize flux ratio like this
 		restricted_flux = self._restricted_flux/self._restricted_flux.mean()
 		factors = self.flux/self.flux.mean()/restricted_flux
+		self.factor = factors[len(factors)//2, 0]
 		for i in range(fine_mesh.nx):
 			cmi = i//self.ratio
 			for g in range(self.groups):

@@ -18,10 +18,10 @@ import numpy as np
 FIXED_SOURCE = 0.0
 G = 2
 # Cell dimensions
-PITCH = 20   # cm; pin pitch
-WIDTH = 20   # cm; length of one side of the square fuel pin
+WIDTH = 100   # cm; distance across the whole problem
+PITCH = WIDTH
 NXMOD = 0
-NXFUEL = 10
+NXFUEL = 20
 BOUNDARIES = ("reflective", "reflective")
 #BOUNDARIES = ("vacuum", "vacuum")
 
@@ -97,7 +97,7 @@ cmr = accelerator.RebalanceAccelerator1D(coarse_mesh, cell)
 
 # test CMFD
 coarse_mesh = FiniteDifferencePincell1D().fromFineMesh(cell, 2)
-cmfd = accelerator.FiniteDifference1D(coarse_mesh, cell)
+cmfd = accelerator.FiniteDifference1D(coarse_mesh, cell, damping=1.0)
 
 #solver = calculator.DiamondDifferenceCalculator1D(s2, cell, accelerator=cmr, kguess=KGUESS)
 solver = calculator.DiamondDifferenceCalculator1D(s2, cell, accelerator=cmfd, kguess=KGUESS)
@@ -108,6 +108,14 @@ phi = solver.mesh.flux
 print(cell)
 print(phi)
 print(solver.k)
+
+from matplotlib import pylab
+pylab.semilogy(solver.factor_by_iter, 'g-', label="Rebalance Factors")
+pylab.semilogy(solver.rms_transport, 'r-', label="RMS (Transport)")
+pylab.xlabel("Iteration #")
+pylab.legend()
+pylab.figure()
+
 if converged:
 	if G == 1:
 		plot1d.plot_1group_flux(cell, True, NXMOD)
