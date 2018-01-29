@@ -243,7 +243,7 @@ class DiamondDifferenceCalculator1D(DiamondDifferenceCalculator):
 		# Get the fission source and flux differences
 		fluxdiff = 0.0
 		
-		if self.fission_source:
+		if self.fission_source is not None:
 			fsdiff = 0.0
 			fs_new = self.mesh.calculate_fission_source()
 			for i in range(self.mesh.nx):
@@ -294,7 +294,7 @@ class DiamondDifferenceCalculator1D(DiamondDifferenceCalculator):
 			inner_count = 0
 			fluxdiff = eps + 1
 			
-			if not self.fission_source:
+			if self.fission_source is not None:
 				fsdiff = 0
 				kdiff = 0
 			
@@ -329,7 +329,7 @@ class DiamondDifferenceCalculator1D(DiamondDifferenceCalculator):
 			# and update the fission source
 			# Also find the relative difference in k
 			ss = self.mesh.calculate_scatter_source()
-			if self.fission_source:
+			if self.fission_source is not None:
 				print(self.fission_source, "->", fs)
 				k_new = self.k*fs.sum()/self.fission_source.sum()
 				kdiff = abs(k_new - self.k)/k_new
