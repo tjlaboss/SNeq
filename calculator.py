@@ -418,18 +418,25 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 		float; RMS of the flux after the sweep
 		"""
 		old_flux = np.array(self.mesh.flux[:, :, :])
+		self.mesh.flux = np.zeros(old_flux.shape)
 		for g in range(self.mesh.groups):
 			# Forward sweep from top left:
 			# +mux, -muy, 0 -> npq
 			for n in range(self.quad.npq):
 				mux = abs(self.quad.muxs[n])
 				muy = abs(self.quad.muys[n])
-				self.mesh.psi[0, :, n, g] = np.array([self._get_psi_west(j, n, g) for j in range(self.mesh.ny)])
+				
+				# FIXME: Not sure which level index is correct.
+				# p = n // 4
+				p = n % self.quad.npq
+				w = self.quad.weights[p]
+				
+				psi_w = np.array([self._get_psi_west(j, n, g) for j in range(self.mesh.ny)])
 				for i in range(self.mesh.nx):
 					psi_in_n = self._get_psi_north(i, n, g)
 					self.mesh.psi_north[i, n, g] = psi_in_n
 					for j in range(self.mesh.ny):
-						psi_in_w = self.mesh.psi[i, j, n, g]
+						psi_in_w = psi_w[j]
 						node = self.mesh.nodes[i, j]
 						q = self._get_source(i, j, g, k)
 						xcoeff = 2*mux/node.dx
@@ -438,10 +445,12 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 						          (node.sigma_tr[g] + xcoeff + ycoeff)
 						psi_out_e = 2*psi_bar - psi_in_w
 						psi_out_s = 2*psi_bar - psi_in_n
-						self.mesh.psi[i+1, j, n, g] = psi_out_e
+						psi_w[j] = psi_out_e
 						if i == self.mesh.nx - 1:
 							self.mesh.psi_east[j, n, g] = psi_out_e
 						psi_in_n = psi_out_s
+						# Update the scalar flux
+						self.mesh.flux[i, j, g] += w*(psi_in_w + psi_out_e)/2.0
 					self.mesh.psi_south[i, n, g] = psi_out_s
 						
 			# Forward sweep from bottom left:
@@ -449,13 +458,14 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 			for n in range(self.quad.npq, 2*self.quad.npq):
 				mux = abs(self.quad.muxs[n - self.quad.npq])
 				muy = abs(self.quad.muys[n - self.quad.npq])
-				self.mesh.psi[0, :, n, g] = np.array(
-					[self._get_psi_west(j, n, g) for j in range(self.mesh.ny)])
+				p = n%self.quad.npq
+				w = self.quad.weights[p]
+				psi_w = np.array([self._get_psi_west(j, n, g) for j in range(self.mesh.ny)])
 				for i in range(self.mesh.nx):
 					psi_in_s = self._get_psi_south(i, n, g)
 					self.mesh.psi_south[i, n, g] = psi_in_s
 					for j in reversed(range(self.mesh.ny)):
-						psi_in_w = self.mesh.psi[i, j, n, g]
+						psi_in_w = psi_w[j]
 						node = self.mesh.nodes[i, j]
 						q = self._get_source(i, j, g, k)
 						xcoeff = 2*mux/node.dx
@@ -464,10 +474,12 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 						          (node.sigma_tr[g] + xcoeff + ycoeff)
 						psi_out_e = 2*psi_bar - psi_in_w
 						psi_out_n = 2*psi_bar - psi_in_s
-						self.mesh.psi[i + 1, j, n, g] = psi_out_e
+						psi_w[j] = psi_out_e
 						if i == self.mesh.nx - 1:
 							self.mesh.psi_east[j, n, g] = psi_out_e
 						psi_in_s = psi_out_n
+						# Update the scalar flux
+						self.mesh.flux[i, j, g] += w*(psi_in_w + psi_out_e)/2.0
 					self.mesh.psi_north[i, n, g] = psi_out_n
 			
 			# Backward sweep from bottom right:
@@ -475,13 +487,14 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 			for n in range(2*self.quad.npq, 3*self.quad.npq):
 				mux = abs(self.quad.muxs[n - 2*self.quad.npq])
 				muy = abs(self.quad.muys[n - 2*self.quad.npq])
-				self.mesh.psi[-1, :, n, g] = np.array(
-					[self._get_psi_east(j, n, g) for j in range(self.mesh.ny)])
+				p = n%self.quad.npq
+				w = self.quad.weights[p]
+				psi_e = np.array([self._get_psi_east(j, n, g) for j in range(self.mesh.ny)])
 				for i in reversed(range(self.mesh.nx)):
 					psi_in_s = self._get_psi_south(i, n, g)
 					self.mesh.psi_south[i, n, g] = psi_in_s
 					for j in reversed(range(self.mesh.ny)):
-						psi_in_e = self.mesh.psi[i+1, j, n, g]
+						psi_in_e = psi_e[j]
 						node = self.mesh.nodes[i, j]
 						q = self._get_source(i, j, g, k)
 						xcoeff = 2*mux/node.dx
@@ -490,10 +503,12 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 						          (node.sigma_tr[g] + xcoeff + ycoeff)
 						psi_out_w = 2*psi_bar - psi_in_e
 						psi_out_n = 2*psi_bar - psi_in_s
-						self.mesh.psi[i, j, n, g] = psi_out_w
+						psi_e[j] = psi_out_w
 						if i == 0:
 							self.mesh.psi_west[j, n, g] = psi_out_w
 						psi_in_s = psi_out_n
+						# Update the scalar flux
+						self.mesh.flux[i, j, g] += w*(psi_in_e + psi_out_w)/2.0
 					self.mesh.psi_north[i, n, g] = psi_out_n
 			
 			# Backward sweep from the top right
@@ -501,13 +516,14 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 			for n in range(3*self.quad.npq, self.quad.Nflux):
 				mux = abs(self.quad.muxs[n - 3*self.quad.npq])
 				muy = abs(self.quad.muys[n - 3*self.quad.npq])
-				self.mesh.psi[-1, :, n, g] = np.array(
-					[self._get_psi_east(j, n, g) for j in range(self.mesh.ny)])
+				p = n % self.quad.npq
+				w = self.quad.weights[p]
+				psi_e = np.array([self._get_psi_east(j, n, g) for j in range(self.mesh.ny)])
 				for i in reversed(range(self.mesh.nx)):
 					psi_in_n = self._get_psi_north(i, n, g)
 					self.mesh.psi_north[i, n, g] = psi_in_n
 					for j in range(self.mesh.ny):
-						psi_in_e = self.mesh.psi[i + 1, j, n, g]
+						psi_in_e = psi_e[j]
 						node = self.mesh.nodes[i, j]
 						q = self._get_source(i, j, g, k)
 						xcoeff = 2*mux/node.dx
@@ -516,28 +532,14 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 						          (node.sigma_tr[g] + xcoeff + ycoeff)
 						psi_out_w = 2*psi_bar - psi_in_e
 						psi_out_s = 2*psi_bar - psi_in_n
-						self.mesh.psi[i, j, n, g] = psi_out_w
+						psi_e[j] = psi_out_w
 						if i == 0:
 							self.mesh.psi_west[j, n, g] = psi_out_w
 						psi_in_n = psi_out_s
+						# Update the scalar flux
+						self.mesh.flux[i, j, g] += w*(psi_in_e + psi_out_w)/2.0
 					self.mesh.psi_south[i, n, g] = psi_out_s
 			
-			# Update the scalar flux using the Diamond Difference approximation
-			for i in range(self.mesh.nx):
-				for j in range(self.mesh.ny):
-					#node = self.mesh.nodes[i, j]
-					#v = node.area / self.mesh.area
-					flux_i = 0.0
-					for n in range(self.quad.Nflux):
-						# FIXME: Not sure which level index is correct.
-						#p = n // 4
-						p = n % self.quad.npq
-						w = self.quad.weights[p]
-						psi_plus = self.mesh.psi[i+1, j, n, g]
-						psi_minus = self.mesh.psi[i, j, n, g]
-						flux_i += w*(psi_plus + psi_minus)/2.0
-					self.mesh.flux[i, j, g] = flux_i
-		
 		rms_flux = self.l2norm2d(self.mesh.flux, old_flux)
 		return rms_flux
 	

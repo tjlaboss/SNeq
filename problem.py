@@ -237,7 +237,11 @@ converged = solver.solve(eps=1E-3, test_convergence=cell.test_convergence)
 fcenter = NMOD + NFUEL // 2
 fedge = NMOD + NFUEL
 cedge = 2*NMOD + NFUEL
-cell.psi /= cell.psi.mean()
+
+if converged:
+	plot2d.plot_1group_flux(cell, True, nxmod=NMOD, grid=True)
+
+
 plot_angular.plot_1group_angular_flux(cell, fcenter, fcenter, "Center of fuel")
 plot_angular.plot_1group_angular_flux(cell, fedge, fcenter, "Corner of fuel")
 plot_angular.plot_1group_angular_flux(cell, fedge, fedge, "Edge of fuel")
