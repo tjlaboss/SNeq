@@ -8,9 +8,9 @@ import mesh
 import quadrature
 import material
 import calculator
-import plot2d
+import plot2d, plot_angular
 
-FIXED_SOURCE = 1.0  # TODO: scale by 1, 2, 4pi?
+FIXED_SOURCE = 1.0
 
 RHO_FUEL = 10.4     # g/cm^3
 RHO_MOD = 0.7       # g/cm^3
@@ -31,13 +31,12 @@ h1 = material.Nuclide(1, {"nu-scatter": SIGMA_S_H1,
 fuel_mat = material.Material().fromNuclides([u238], RHO_FUEL, name="Fuel")
 fuel_mat.macro_xs["transport"] = sum(fuel_mat.macro_xs.values())
 mod_mat = material.Material().fromNuclides([o16, h1, h1], RHO_MOD, name="Moderator")
-#for xs in mod_mat.macro_xs:
-#	mod_mat.macro_xs[xs] = 0.5*fuel_mat.macro_xs[xs]
 mod_mat.macro_xs["transport"] = sum(mod_mat.macro_xs.values())
 
 # Cell dimensions
 PITCH = 1.25            # cm; pin pitch
 WIDTH = 0.80            # cm; length of one side of the square fuel pin
+BOUNDARIES = ["periodic"]*4
 
 
 class Pincell2D(mesh.Mesh2D):
@@ -97,6 +96,8 @@ class Pincell2D(mesh.Mesh2D):
 		self._dys = (self._dy_mod, self._dy_fuel, self._dy_mod)
 		#
 		self._populate()
+		# Fuel-to-moderator ratio
+		self._fm = -1
 		
 	
 	def __str__(self):
@@ -140,33 +141,108 @@ Indices:
 			
 	def calculate_fission_source(self):
 		return None
+	
+	def get_fm_flux_ratio(self):
+		fuel_flux = 0.0
+		mod_flux = 0.0
+		for g in range(self.groups):
+			for i in range(self.nx):
+				for j in range(self.ny):
+					area = self.nodes[i, j].area
+					region = self.get_region(i, j)
+					if region == (1, 1):
+						fuel_flux += self.flux[i, j, g]*area
+					else:
+						mod_flux += self.flux[i, j, g]*area
+		return fuel_flux/mod_flux
+	
+	def test_convergence(self, eps=0.001):
+		"""Check whether the convergence criterion
+		for this problem has been met.
+		
+		For PSet05, this is a 0.1% change in the scalar flux ratio
+		between the fuel and the moderator.
+		
+		Returns:
+		--------
+		Boolean; True if converged, otherwise False
+		"""
+		new_ratio = self.get_fm_flux_ratio()
+		if abs(new_ratio - self._fm)/self._fm > eps:
+			converged = False
+		else:
+			converged = True
+		self._fm = new_ratio
+		return converged
+	
+'''
+# Part 1
+NFUEL = 4
+NMOD = 1
+s4 = quadrature.LevelSymmetricQuadrature2D(4)
+report = "\nProblem 1:"
+diff = 0.0
+last_ratio = None
+for n in range(6):
+	#cell = Pincell2D(s4, mod_mat, fuel_mat, NMOD, NFUEL, NMOD, NFUEL)
+	nmod = (n+1)*NMOD
+	nfuel = (n+1)*NFUEL
+	cell = Pincell2D(s4, mod_mat, fuel_mat, nmod, nfuel, nmod, nfuel)
+	solver = calculator.DiamondDifferenceCalculator2D(s4, cell, BOUNDARIES, kguess=None)
+	converged = solver.solve(eps=1E-6, test_convergence=cell.test_convergence)
+	#
+	ratio = cell.get_fm_flux_ratio()
+	if n > 0:
+		diff = abs(ratio - last_ratio)/ratio
+	report += "\n\tMesh: \t|  Fuel-to-Moderator flux ratio: \t| % change: "
+	report += "\n\t" + "-"*60
+	report += "\n\t{}x{} \t|  {:.4f}                        \t| {:.3%}".format(2*nmod+nfuel, 2*nmod+nfuel, ratio, diff)
+	dxf, dxm = cell._dxs[:2]
+	report += '\n\t\tMesh size: {:.3f} cm fuel, {:.3f} cm mod'.format(dxf, dxm)
+	report += "\n\t" + "="*79
+	last_ratio = ratio
+print(report)
 
-# test
-#BOUNDARIES = ["vacuum"]*4
-BOUNDARIES = ["periodic"]*4
-#BOUNDARIES = ["reflective"]*4
-NFUEL = 12*4
-NMOD = 4*4
+
+# Part 2
+NFUEL = 12
+NMOD = 3
+ns = (2, 4, 8, 16)
+report = "\nProblem 2:"
+report += "\n\tOrder:\t|  Fuel-to-Moderator flux ratio: "
+report += "\n\t" + "-"*60
+for n in ns:
+	sn = quadrature.LevelSymmetricQuadrature2D(n)
+	cell = Pincell2D(sn, mod_mat, fuel_mat, NMOD, NFUEL, NMOD, NFUEL)
+	solver = calculator.DiamondDifferenceCalculator2D(sn, cell, BOUNDARIES, kguess=None)
+	converged = solver.solve(eps=1E-6, test_convergence=cell.test_convergence)
+	ratio = cell.get_fm_flux_ratio()
+	order = str(n).ljust(2)
+	report += "\n\t S{}\t|  {:.4f}".format(order, ratio)
+report += "\n" + "="*79
+print(report)
+
+#if converged:
+#	plot2d.plot_1group_flux(cell, True, nxmod=5, grid=False)
+'''
+
+# Part 3
+NFUEL = 12
+NMOD = 3
 s4 = quadrature.LevelSymmetricQuadrature2D(4)
 cell = Pincell2D(s4, mod_mat, fuel_mat, NMOD, NFUEL, NMOD, NFUEL)
-
-import numpy as np
-ntot = NFUEL+NMOD
-q_over_sigma = np.empty((NFUEL+NMOD, NFUEL+NMOD))
-for i in range(ntot):
-	for j in range(ntot):
-		node = cell.nodes[i, j]
-		q_over_sigma[i, j] = node.source / node.sigma_tr[0]
-
 solver = calculator.DiamondDifferenceCalculator2D(s4, cell, BOUNDARIES, kguess=None)
-#solver.transport_sweep(False)
-import time
-t1 = time.clock()
-converged = solver.solve(eps=1E-5)
-t2 = time.clock()
-phi = solver.mesh.flux[:,:,0]
-print(phi)
-print(t2 - t1, "seconds") #8.754909
-converged=True
-if converged:
-	plot2d.plot_1group_flux(cell, True, nxmod=5, grid=False)
+converged = solver.solve(eps=1E-3, test_convergence=cell.test_convergence)
+
+fcenter = NMOD + NFUEL // 2
+fedge = NMOD + NFUEL
+cedge = 2*NMOD + NFUEL
+cell.psi /= cell.psi.mean()
+plot_angular.plot_1group_angular_flux(cell, fcenter, fcenter, "Center of fuel")
+plot_angular.plot_1group_angular_flux(cell, fedge, fcenter, "Corner of fuel")
+plot_angular.plot_1group_angular_flux(cell, fedge, fedge, "Edge of fuel")
+plot_angular.plot_1group_angular_flux(cell, cedge, cedge, "Edge of cell")
+
+
+import pylab
+pylab.show()

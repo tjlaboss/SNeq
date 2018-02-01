@@ -272,7 +272,7 @@ class DiamondDifferenceCalculator1D(DiamondDifferenceCalculator):
 		return fs_new, rms_fs, rms_flux
 		
 				
-	def solve(self, eps, maxiter=1000):
+	def solve(self, eps, test_convergence=lambda: True, maxiter=1000):
 		"""Solve on the mesh within tolerance
 		
 		Parameters:
@@ -289,7 +289,7 @@ class DiamondDifferenceCalculator1D(DiamondDifferenceCalculator):
 		kdiff = eps + 1
 		outer_count = 0
 		# Outer: converge the fission source
-		while fsdiff > eps or kdiff > eps:
+		while (fsdiff > eps or kdiff > eps) or not test_convergence():
 			print("kguess = {}".format(self.k))
 			inner_count = 0
 			fluxdiff = eps + 1
@@ -540,12 +540,12 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 		
 		rms_flux = self.l2norm2d(self.mesh.flux, old_flux)
 		return rms_flux
-
 	
-	def solve(self, eps, maxiter=1000):
+
+	def solve(self, eps, test_convergence = lambda: True, maxiter=1000):
 		outer_count = 0
 		ssdiff = 1 + eps
-		while ssdiff > eps:
+		while (ssdiff > eps) or not test_convergence():
 			old_source = np.array(self.scatter_source)
 			fluxdiff = self.transport_sweep(self.k)
 			'''
@@ -575,7 +575,6 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 			ssdiff = self.l2norm2d(ss, old_source)
 			print("RMS (outer): {}".format(ssdiff))
 			self.scatter_source = ss
-			print()
 			
 		print("Solution converged after {} outer iterations".format(outer_count))
 		return True
