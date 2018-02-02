@@ -3,11 +3,13 @@
 # Constants, dimensions, etc. for the solver
 # Expect this file to change greatly over the course of its development
 
+import pylab
 import node
 import mesh
 import quadrature
 import material
 import calculator
+import tallies
 import plot2d, plot_angular
 
 FIXED_SOURCE = 1.0
@@ -175,7 +177,6 @@ Indices:
 		self._fm = new_ratio
 		return converged
 	
-'''
 # Part 1
 NFUEL = 4
 NMOD = 1
@@ -183,29 +184,28 @@ s4 = quadrature.LevelSymmetricQuadrature2D(4)
 report = "\nProblem 1:"
 diff = 0.0
 last_ratio = None
-for n in range(6):
+for n in range(1):
 	#cell = Pincell2D(s4, mod_mat, fuel_mat, NMOD, NFUEL, NMOD, NFUEL)
-	nmod = (n+1)*NMOD
+	nmod =  (n+1)*NMOD
 	nfuel = (n+1)*NFUEL
 	cell = Pincell2D(s4, mod_mat, fuel_mat, nmod, nfuel, nmod, nfuel)
 	solver = calculator.DiamondDifferenceCalculator2D(s4, cell, BOUNDARIES, kguess=None)
 	converged = solver.solve(eps=1E-6, test_convergence=cell.test_convergence)
-	#
-	ratio = cell.get_fm_flux_ratio()
-	if n > 0:
-		diff = abs(ratio - last_ratio)/ratio
-	report += "\n\tMesh: \t|  Fuel-to-Moderator flux ratio: \t| % change: "
-	report += "\n\t" + "-"*60
-	report += "\n\t{}x{} \t|  {:.4f}                        \t| {:.3%}".format(2*nmod+nfuel, 2*nmod+nfuel, ratio, diff)
-	dxf, dxm = cell._dxs[:2]
-	report += '\n\t\tMesh size: {:.3f} cm fuel, {:.3f} cm mod'.format(dxf, dxm)
-	report += "\n\t" + "="*79
-	last_ratio = ratio
+	if converged:
+		ratio = cell.get_fm_flux_ratio()
+		if n > 0:
+			diff = abs(ratio - last_ratio)/ratio
+		report += "\n\tMesh: \t|  Fuel-to-Moderator flux ratio: \t| % change: "
+		report += "\n\t" + "-"*60
+		report += "\n\t{}x{} \t|  {:.4f}                        \t| {:.3%}".format(2*nmod+nfuel, 2*nmod+nfuel, ratio, diff)
+		dxf, dxm = cell._dxs[:2]
+		report += '\n\t\tMesh size: {:.3f} cm fuel, {:.3f} cm mod'.format(dxf, dxm)
+		report += "\n\t" + "="*79
+		last_ratio = ratio
 print(report)
 
-
 # Part 2
-NFUEL = 12
+NFUEL = 11
 NMOD = 3
 ns = (2, 4, 8, 16)
 report = "\nProblem 2:"
@@ -216,37 +216,44 @@ for n in ns:
 	cell = Pincell2D(sn, mod_mat, fuel_mat, NMOD, NFUEL, NMOD, NFUEL)
 	solver = calculator.DiamondDifferenceCalculator2D(sn, cell, BOUNDARIES, kguess=None)
 	converged = solver.solve(eps=1E-6, test_convergence=cell.test_convergence)
-	ratio = cell.get_fm_flux_ratio()
-	order = str(n).ljust(2)
-	report += "\n\t S{}\t|  {:.4f}".format(order, ratio)
+	if converged:
+		ratio = cell.get_fm_flux_ratio()
+		order = str(n).ljust(2)
+		report += "\n\t S{}\t|  {:.4f}".format(order, ratio)
 report += "\n" + "="*79
 print(report)
 
-#if converged:
-#	plot2d.plot_1group_flux(cell, True, nxmod=5, grid=False)
-'''
 
 # Part 3
-NFUEL = 12
+NFUEL = 11
 NMOD = 3
-s4 = quadrature.LevelSymmetricQuadrature2D(4)
-cell = Pincell2D(s4, mod_mat, fuel_mat, NMOD, NFUEL, NMOD, NFUEL)
-solver = calculator.DiamondDifferenceCalculator2D(s4, cell, BOUNDARIES, kguess=None)
-converged = solver.solve(eps=1E-3, test_convergence=cell.test_convergence)
-
+s16 = quadrature.LevelSymmetricQuadrature2D(16)
+cell = Pincell2D(s16, mod_mat, fuel_mat, NMOD, NFUEL, NMOD, NFUEL)
+# Build the tallies
+level0 = s16.levels[0]
 fcenter = NMOD + NFUEL // 2
-fedge = NMOD + NFUEL
-cedge = 2*NMOD + NFUEL
+fedge = NMOD + NFUEL - 1
+cedge = 2*NMOD + NFUEL - 1
+tal_fcenter = tallies.AngularFluxTally2D(fcenter, fcenter, level0, range(1),
+                                         name="Center of fuel")
+tal_fedge = tallies.AngularFluxTally2D(fedge, fcenter, level0, range(1),
+                                         name="Edge of fuel")
+tal_fcorner = tallies.AngularFluxTally2D(fedge, fedge, level0, range(1),
+                                         name="Corner of fuel")
+tal_ccorner = tallies.AngularFluxTally2D(cedge, cedge, level0, range(1),
+                                         name="Corner of cell")
+psi_tallies = [tal_fcenter, tal_fedge, tal_fcorner, tal_ccorner]
+
+solver = calculator.DiamondDifferenceCalculator2D(s16, cell, BOUNDARIES, kguess=None,
+                                                  tallies=psi_tallies)
+converged = solver.solve(eps=1E-6, test_convergence=cell.test_convergence)
 
 if converged:
+	# Plot
+	title_text = "$\\bf S_{{{}}}$ Angular Flux: ".format(cell.quad.N)
+	theta0 = -1.5*pylab.arctan(cell.quad.muys[0]/cell.quad.muxs[0])
+	print(theta0)
+	for tal in psi_tallies:
+		plot_angular.plot_1group_angular_flux(tal, theta0, title_text)
 	plot2d.plot_1group_flux(cell, True, nxmod=NMOD, grid=True)
-
-
-plot_angular.plot_1group_angular_flux(cell, fcenter, fcenter, "Center of fuel")
-plot_angular.plot_1group_angular_flux(cell, fedge, fcenter, "Corner of fuel")
-plot_angular.plot_1group_angular_flux(cell, fedge, fedge, "Edge of fuel")
-plot_angular.plot_1group_angular_flux(cell, cedge, cedge, "Edge of cell")
-
-
-import pylab
-pylab.show()
+	pylab.show()

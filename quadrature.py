@@ -2,6 +2,7 @@
 #
 # Classes and data for quadrature sets
 
+import numpy as np
 from numpy.polynomial.legendre import leggauss
 from constants import EDGES
 import _level_symmetric
@@ -84,6 +85,24 @@ class LevelSymmetricQuadrature2D(Quadrature):
 		self.weights = sdict["weight"]
 		self.npq = len(self.weights)  # number per quadrant
 		self.Nflux = 4*self.npq
+		self.levels = self._set_levels()
+	
+	def _set_levels(self, d=5):
+		level_muzs = sorted(np.unique(self.muzs.round(d+1)))
+		n_levels = len(level_muzs)
+		indices = np.empty(n_levels, dtype=list)
+		for q in range(4):
+			n0 = q*self.npq
+			for a, muz in enumerate(self.muzs):
+				index = n0 + a
+				for i, lev_muz in enumerate(level_muzs):
+					if np.isclose(muz, lev_muz, 10**-d):
+						if indices[i] is None:
+							indices[i] = [index]
+						else:
+							indices[i].append(index)
+		return indices
+	
 	
 	def reflect_angle(self, n, side):
 		"""Get the angular index corresponding to the outgoing flux

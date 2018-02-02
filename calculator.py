@@ -19,13 +19,19 @@ class DiamondDifferenceCalculator(object):
 					[Default: 1.0]
 	accelerator:    Accelerator, if one is desired
 					[Default: None]
+	tallies:        Tally, if any are desired
+					[Default: None]
 	"""
 	
-	def __init__(self, quad, mesh, bcs, kguess=1.0, accelerator=None):
+	def __init__(self, quad, mesh, bcs, kguess=1.0, accelerator=None, tallies=None):
 		self.quad = quad
 		self.mesh = mesh
 		self.k = kguess
 		self.accelerator = accelerator
+		if tallies is None:
+			self.tallies = []
+		else:
+			self.tallies = tallies
 		self.fission_source = self.mesh.calculate_fission_source()
 		self.scatter_source = self.mesh.calculate_scatter_source()
 	
@@ -160,7 +166,7 @@ class DiamondDifferenceCalculator(object):
 
 
 class DiamondDifferenceCalculator1D(DiamondDifferenceCalculator):
-	"""Two-group, one-dimensional diamond difference solver
+	"""Multigroup, one-dimensional diamond difference solver
 	
 	Parameters:
 	-----------
@@ -172,10 +178,12 @@ class DiamondDifferenceCalculator1D(DiamondDifferenceCalculator):
 					[Default: 1.0]
 	accelerator:    Accelerator, if one is desired
 					[Default: None]
+	tallies:        Tally1D, if any are desired
+					[Default: None]
 	"""
-	def __init__(self, quad, mesh, bcs, kguess=1.0, accelerator=None):
+	def __init__(self, quad, mesh, bcs, kguess=1.0, accelerator=None, tallies=None):
 		assert len(bcs) == 2, "A 1D solution requires 2 boundary conditions."
-		super().__init__(quad, mesh, bcs, kguess, accelerator)
+		super().__init__(quad, mesh, bcs, kguess, accelerator, tallies)
 		self._get_psi_west, self._get_psi_east = self._set_bcs(bcs)
 	
 	
@@ -365,9 +373,11 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 	bcs:            tuple of ("west", "east", "north", "south")
 	kguess:         float; initial guess for the eigenvalue
 					[Default: 1.0]
+	tallies:        Tally2D, if any are desired
+					[Default: None]
 	"""
-	def __init__(self, quad, mesh, bcs, kguess=1.0, accelerator=None):
-		super().__init__(quad, mesh, bcs, kguess, accelerator)
+	def __init__(self, quad, mesh, bcs, kguess=1.0, accelerator=None, tallies=None):
+		super().__init__(quad, mesh, bcs, kguess, accelerator, tallies)
 		self._get_psi_west, self._get_psi_east, self._get_psi_north, \
 			self._get_psi_south = self._set_bcs(bcs)
 		
@@ -449,6 +459,10 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 						if i == self.mesh.nx - 1:
 							self.mesh.psi_east[j, n, g] = psi_out_e
 						psi_in_n = psi_out_s
+						# Tally the results
+						for tal in self.tallies:
+							if tal.applies(i, j, n, g):
+								tal.update(psi_bar, n, g)
 						# Update the scalar flux
 						self.mesh.flux[i, j, g] += w*(psi_in_w + psi_out_e)/2.0
 					self.mesh.psi_south[i, n, g] = psi_out_s
@@ -478,6 +492,10 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 						if i == self.mesh.nx - 1:
 							self.mesh.psi_east[j, n, g] = psi_out_e
 						psi_in_s = psi_out_n
+						# Tally the results
+						for tal in self.tallies:
+							if tal.applies(i, j, n, g):
+								tal.update(psi_bar, n, g)
 						# Update the scalar flux
 						self.mesh.flux[i, j, g] += w*(psi_in_w + psi_out_e)/2.0
 					self.mesh.psi_north[i, n, g] = psi_out_n
@@ -507,6 +525,10 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 						if i == 0:
 							self.mesh.psi_west[j, n, g] = psi_out_w
 						psi_in_s = psi_out_n
+						# Tally the results
+						for tal in self.tallies:
+							if tal.applies(i, j, n, g):
+								tal.update(psi_bar, n, g)
 						# Update the scalar flux
 						self.mesh.flux[i, j, g] += w*(psi_in_e + psi_out_w)/2.0
 					self.mesh.psi_north[i, n, g] = psi_out_n
@@ -536,6 +558,10 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 						if i == 0:
 							self.mesh.psi_west[j, n, g] = psi_out_w
 						psi_in_n = psi_out_s
+						# Tally the results
+						for tal in self.tallies:
+							if tal.applies(i, j, n, g):
+								tal.update(psi_bar, n, g)
 						# Update the scalar flux
 						self.mesh.flux[i, j, g] += w*(psi_in_e + psi_out_w)/2.0
 					self.mesh.psi_south[i, n, g] = psi_out_s
