@@ -19,13 +19,19 @@ class DiamondDifferenceCalculator(object):
 					[Default: 1.0]
 	accelerator:    Accelerator, if one is desired
 					[Default: None]
+	tallies:        Tally, if any are desired
+					[Default: None]
 	"""
 	
-	def __init__(self, quad, mesh, bcs, kguess=1.0, accelerator=None):
+	def __init__(self, quad, mesh, bcs, kguess=1.0, accelerator=None, tallies=None):
 		self.quad = quad
 		self.mesh = mesh
 		self.k = kguess
 		self.accelerator = accelerator
+		if tallies is None:
+			self.tallies = []
+		else:
+			self.tallies = tallies
 		self.fission_source = self.mesh.calculate_fission_source()
 		self.scatter_source = self.mesh.calculate_scatter_source()
 	
@@ -160,7 +166,7 @@ class DiamondDifferenceCalculator(object):
 
 
 class DiamondDifferenceCalculator1D(DiamondDifferenceCalculator):
-	"""Two-group, one-dimensional diamond difference solver
+	"""Multigroup, one-dimensional diamond difference solver
 	
 	Parameters:
 	-----------
@@ -172,10 +178,12 @@ class DiamondDifferenceCalculator1D(DiamondDifferenceCalculator):
 					[Default: 1.0]
 	accelerator:    Accelerator, if one is desired
 					[Default: None]
+	tallies:        Tally1D, if any are desired
+					[Default: None]
 	"""
-	def __init__(self, quad, mesh, bcs, kguess=1.0, accelerator=None):
+	def __init__(self, quad, mesh, bcs, kguess=1.0, accelerator=None, tallies=None):
 		assert len(bcs) == 2, "A 1D solution requires 2 boundary conditions."
-		super().__init__(quad, mesh, bcs, kguess, accelerator)
+		super().__init__(quad, mesh, bcs, kguess, accelerator, tallies)
 		self._get_psi_west, self._get_psi_east = self._set_bcs(bcs)
 	
 	
@@ -272,7 +280,7 @@ class DiamondDifferenceCalculator1D(DiamondDifferenceCalculator):
 		return fs_new, rms_fs, rms_flux
 		
 				
-	def solve(self, eps, maxiter=1000):
+	def solve(self, eps, test_convergence=lambda: True, maxiter=1000):
 		"""Solve on the mesh within tolerance
 		
 		Parameters:
@@ -289,7 +297,7 @@ class DiamondDifferenceCalculator1D(DiamondDifferenceCalculator):
 		kdiff = eps + 1
 		outer_count = 0
 		# Outer: converge the fission source
-		while fsdiff > eps or kdiff > eps:
+		while (fsdiff > eps or kdiff > eps) or not test_convergence():
 			print("kguess = {}".format(self.k))
 			inner_count = 0
 			fluxdiff = eps + 1
@@ -365,9 +373,11 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 	bcs:            tuple of ("west", "east", "north", "south")
 	kguess:         float; initial guess for the eigenvalue
 					[Default: 1.0]
+	tallies:        Tally2D, if any are desired
+					[Default: None]
 	"""
-	def __init__(self, quad, mesh, bcs, kguess=1.0, accelerator=None):
-		super().__init__(quad, mesh, bcs, kguess, accelerator)
+	def __init__(self, quad, mesh, bcs, kguess=1.0, accelerator=None, tallies=None):
+		super().__init__(quad, mesh, bcs, kguess, accelerator, tallies)
 		self._get_psi_west, self._get_psi_east, self._get_psi_north, \
 			self._get_psi_south = self._set_bcs(bcs)
 		
@@ -418,18 +428,25 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 		float; RMS of the flux after the sweep
 		"""
 		old_flux = np.array(self.mesh.flux[:, :, :])
+		self.mesh.flux = np.zeros(old_flux.shape)
 		for g in range(self.mesh.groups):
 			# Forward sweep from top left:
 			# +mux, -muy, 0 -> npq
 			for n in range(self.quad.npq):
 				mux = abs(self.quad.muxs[n])
 				muy = abs(self.quad.muys[n])
-				self.mesh.psi[0, :, n, g] = np.array([self._get_psi_west(j, n, g) for j in range(self.mesh.ny)])
+				
+				# FIXME: Not sure which level index is correct.
+				# p = n // 4
+				p = n % self.quad.npq
+				w = self.quad.weights[p]
+				
+				psi_w = np.array([self._get_psi_west(j, n, g) for j in range(self.mesh.ny)])
 				for i in range(self.mesh.nx):
 					psi_in_n = self._get_psi_north(i, n, g)
 					self.mesh.psi_north[i, n, g] = psi_in_n
 					for j in range(self.mesh.ny):
-						psi_in_w = self.mesh.psi[i, j, n, g]
+						psi_in_w = psi_w[j]
 						node = self.mesh.nodes[i, j]
 						q = self._get_source(i, j, g, k)
 						xcoeff = 2*mux/node.dx
@@ -438,10 +455,16 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 						          (node.sigma_tr[g] + xcoeff + ycoeff)
 						psi_out_e = 2*psi_bar - psi_in_w
 						psi_out_s = 2*psi_bar - psi_in_n
-						self.mesh.psi[i+1, j, n, g] = psi_out_e
+						psi_w[j] = psi_out_e
 						if i == self.mesh.nx - 1:
 							self.mesh.psi_east[j, n, g] = psi_out_e
 						psi_in_n = psi_out_s
+						# Tally the results
+						for tal in self.tallies:
+							if tal.applies(i, j, n, g):
+								tal.update(psi_bar, n, g)
+						# Update the scalar flux
+						self.mesh.flux[i, j, g] += w*(psi_in_w + psi_out_e)/2.0
 					self.mesh.psi_south[i, n, g] = psi_out_s
 						
 			# Forward sweep from bottom left:
@@ -449,13 +472,14 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 			for n in range(self.quad.npq, 2*self.quad.npq):
 				mux = abs(self.quad.muxs[n - self.quad.npq])
 				muy = abs(self.quad.muys[n - self.quad.npq])
-				self.mesh.psi[0, :, n, g] = np.array(
-					[self._get_psi_west(j, n, g) for j in range(self.mesh.ny)])
+				p = n%self.quad.npq
+				w = self.quad.weights[p]
+				psi_w = np.array([self._get_psi_west(j, n, g) for j in range(self.mesh.ny)])
 				for i in range(self.mesh.nx):
 					psi_in_s = self._get_psi_south(i, n, g)
 					self.mesh.psi_south[i, n, g] = psi_in_s
 					for j in reversed(range(self.mesh.ny)):
-						psi_in_w = self.mesh.psi[i, j, n, g]
+						psi_in_w = psi_w[j]
 						node = self.mesh.nodes[i, j]
 						q = self._get_source(i, j, g, k)
 						xcoeff = 2*mux/node.dx
@@ -464,10 +488,16 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 						          (node.sigma_tr[g] + xcoeff + ycoeff)
 						psi_out_e = 2*psi_bar - psi_in_w
 						psi_out_n = 2*psi_bar - psi_in_s
-						self.mesh.psi[i + 1, j, n, g] = psi_out_e
+						psi_w[j] = psi_out_e
 						if i == self.mesh.nx - 1:
 							self.mesh.psi_east[j, n, g] = psi_out_e
 						psi_in_s = psi_out_n
+						# Tally the results
+						for tal in self.tallies:
+							if tal.applies(i, j, n, g):
+								tal.update(psi_bar, n, g)
+						# Update the scalar flux
+						self.mesh.flux[i, j, g] += w*(psi_in_w + psi_out_e)/2.0
 					self.mesh.psi_north[i, n, g] = psi_out_n
 			
 			# Backward sweep from bottom right:
@@ -475,13 +505,14 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 			for n in range(2*self.quad.npq, 3*self.quad.npq):
 				mux = abs(self.quad.muxs[n - 2*self.quad.npq])
 				muy = abs(self.quad.muys[n - 2*self.quad.npq])
-				self.mesh.psi[-1, :, n, g] = np.array(
-					[self._get_psi_east(j, n, g) for j in range(self.mesh.ny)])
+				p = n%self.quad.npq
+				w = self.quad.weights[p]
+				psi_e = np.array([self._get_psi_east(j, n, g) for j in range(self.mesh.ny)])
 				for i in reversed(range(self.mesh.nx)):
 					psi_in_s = self._get_psi_south(i, n, g)
 					self.mesh.psi_south[i, n, g] = psi_in_s
 					for j in reversed(range(self.mesh.ny)):
-						psi_in_e = self.mesh.psi[i+1, j, n, g]
+						psi_in_e = psi_e[j]
 						node = self.mesh.nodes[i, j]
 						q = self._get_source(i, j, g, k)
 						xcoeff = 2*mux/node.dx
@@ -490,10 +521,16 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 						          (node.sigma_tr[g] + xcoeff + ycoeff)
 						psi_out_w = 2*psi_bar - psi_in_e
 						psi_out_n = 2*psi_bar - psi_in_s
-						self.mesh.psi[i, j, n, g] = psi_out_w
+						psi_e[j] = psi_out_w
 						if i == 0:
 							self.mesh.psi_west[j, n, g] = psi_out_w
 						psi_in_s = psi_out_n
+						# Tally the results
+						for tal in self.tallies:
+							if tal.applies(i, j, n, g):
+								tal.update(psi_bar, n, g)
+						# Update the scalar flux
+						self.mesh.flux[i, j, g] += w*(psi_in_e + psi_out_w)/2.0
 					self.mesh.psi_north[i, n, g] = psi_out_n
 			
 			# Backward sweep from the top right
@@ -501,13 +538,14 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 			for n in range(3*self.quad.npq, self.quad.Nflux):
 				mux = abs(self.quad.muxs[n - 3*self.quad.npq])
 				muy = abs(self.quad.muys[n - 3*self.quad.npq])
-				self.mesh.psi[-1, :, n, g] = np.array(
-					[self._get_psi_east(j, n, g) for j in range(self.mesh.ny)])
+				p = n % self.quad.npq
+				w = self.quad.weights[p]
+				psi_e = np.array([self._get_psi_east(j, n, g) for j in range(self.mesh.ny)])
 				for i in reversed(range(self.mesh.nx)):
 					psi_in_n = self._get_psi_north(i, n, g)
 					self.mesh.psi_north[i, n, g] = psi_in_n
 					for j in range(self.mesh.ny):
-						psi_in_e = self.mesh.psi[i + 1, j, n, g]
+						psi_in_e = psi_e[j]
 						node = self.mesh.nodes[i, j]
 						q = self._get_source(i, j, g, k)
 						xcoeff = 2*mux/node.dx
@@ -516,36 +554,26 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 						          (node.sigma_tr[g] + xcoeff + ycoeff)
 						psi_out_w = 2*psi_bar - psi_in_e
 						psi_out_s = 2*psi_bar - psi_in_n
-						self.mesh.psi[i, j, n, g] = psi_out_w
+						psi_e[j] = psi_out_w
 						if i == 0:
 							self.mesh.psi_west[j, n, g] = psi_out_w
 						psi_in_n = psi_out_s
+						# Tally the results
+						for tal in self.tallies:
+							if tal.applies(i, j, n, g):
+								tal.update(psi_bar, n, g)
+						# Update the scalar flux
+						self.mesh.flux[i, j, g] += w*(psi_in_e + psi_out_w)/2.0
 					self.mesh.psi_south[i, n, g] = psi_out_s
 			
-			# Update the scalar flux using the Diamond Difference approximation
-			for i in range(self.mesh.nx):
-				for j in range(self.mesh.ny):
-					#node = self.mesh.nodes[i, j]
-					#v = node.area / self.mesh.area
-					flux_i = 0.0
-					for n in range(self.quad.Nflux):
-						# FIXME: Not sure which level index is correct.
-						#p = n // 4
-						p = n % self.quad.npq
-						w = self.quad.weights[p]
-						psi_plus = self.mesh.psi[i+1, j, n, g]
-						psi_minus = self.mesh.psi[i, j, n, g]
-						flux_i += w*(psi_plus + psi_minus)/2.0
-					self.mesh.flux[i, j, g] = flux_i
-		
 		rms_flux = self.l2norm2d(self.mesh.flux, old_flux)
 		return rms_flux
-
 	
-	def solve(self, eps, maxiter=1000):
+
+	def solve(self, eps, test_convergence = lambda: True, maxiter=1000):
 		outer_count = 0
 		ssdiff = 1 + eps
-		while ssdiff > eps:
+		while (ssdiff > eps) or not test_convergence():
 			old_source = np.array(self.scatter_source)
 			fluxdiff = self.transport_sweep(self.k)
 			'''
@@ -575,7 +603,6 @@ class DiamondDifferenceCalculator2D(DiamondDifferenceCalculator):
 			ssdiff = self.l2norm2d(ss, old_source)
 			print("RMS (outer): {}".format(ssdiff))
 			self.scatter_source = ss
-			print()
 			
 		print("Solution converged after {} outer iterations".format(outer_count))
 		return True
