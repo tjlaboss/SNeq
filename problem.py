@@ -176,7 +176,8 @@ Indices:
 			converged = True
 		self._fm = new_ratio
 		return converged
-	
+
+
 # Part 1
 NFUEL = 4
 NMOD = 1
@@ -223,7 +224,6 @@ for n in ns:
 report += "\n" + "="*79
 print(report)
 
-
 # Part 3
 NFUEL = 11
 NMOD = 3
@@ -251,9 +251,9 @@ converged = solver.solve(eps=1E-6, test_convergence=cell.test_convergence)
 if converged:
 	# Plot
 	title_text = "$\\bf S_{{{}}}$ Angular Flux: ".format(cell.quad.N)
-	theta0 = -1.5*pylab.arctan(cell.quad.muys[0]/cell.quad.muxs[0])
-	print(theta0)
+	theta0 = 1.5*pylab.pi
 	for tal in psi_tallies:
-		plot_angular.plot_1group_angular_flux(tal, theta0, title_text)
+		plot_angular.plot_1group_angular_flux(tal, s16, theta0, title_text)
+	pylab.show()
 	plot2d.plot_1group_flux(cell, True, nxmod=NMOD, grid=True)
 	pylab.show()
