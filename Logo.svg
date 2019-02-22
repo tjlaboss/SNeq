@@ -34,15 +34,15 @@
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
      inkscape:zoom="4"
-     inkscape:cx="15.568808"
+     inkscape:cx="-21.056192"
      inkscape:cy="41.522658"
      inkscape:document-units="px"
-     inkscape:current-layer="g5448"
+     inkscape:current-layer="layer1"
      showgrid="false"
      inkscape:window-width="1920"
-     inkscape:window-height="1056"
-     inkscape:window-x="1920"
-     inkscape:window-y="0"
+     inkscape:window-height="990"
+     inkscape:window-x="0"
+     inkscape:window-y="33"
      inkscape:window-maximized="1"
      fit-margin-top="0"
      fit-margin-left="0"
@@ -56,7 +56,7 @@
         <dc:format>image/svg+xml</dc:format>
         <dc:type
            rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
-        <dc:title></dc:title>
+        <dc:title />
       </cc:Work>
     </rdf:RDF>
   </metadata>
@@ -98,7 +98,7 @@
            height="128.28937"
            x="86.873116"
            y="113.93049" /></flowRegion><flowPara
-         id="flowPara4142"></flowPara></flowRoot>    <path
+         id="flowPara4142" /></flowRoot>    <path
        style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:1.36300755px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
        d="m 136.29729,207.62085 -1.63257,1.42476 0.0731,-16.4696 11.84589,15.39874 -0.01,-16.40449 -1.50707,1.19063"
        id="path5053"
@@ -126,23 +126,20 @@
            height="86.25"
            x="154.10715"
            y="133.43362" /></flowRegion><flowPara
-         id="flowPara5067" /></flowRoot>    <flowRoot
-       xml:space="preserve"
-       id="flowRoot5081"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:40.00099564px;line-height:125%;font-family:'Latin Modern Roman Dunhill';-inkscape-font-specification:'Latin Modern Roman Dunhill, Normal';text-align:start;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:start;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+         id="flowPara5067" /></flowRoot>    <g
        transform="matrix(1.2906112,0,0,1.4568004,-22.556887,113.59589)"
-       inkscape:export-filename="/home/travis/path5428.png"
-       inkscape:export-xdpi="800"
-       inkscape:export-ydpi="800"><flowRegion
-         id="flowRegion5083"><rect
-           id="rect5085"
-           width="136.07144"
-           height="115.35714"
-           x="139.28572"
-           y="27.719345"
-           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:40.00099564px;line-height:125%;font-family:'Latin Modern Roman Dunhill';-inkscape-font-specification:'Latin Modern Roman Dunhill, Normal';text-align:start;writing-mode:lr-tb;text-anchor:start" /></flowRegion><flowPara
-         id="flowPara5087"
-         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:40.00099564px;line-height:125%;font-family:'Latin Modern Roman Dunhill';-inkscape-font-specification:'Latin Modern Roman Dunhill, Normal';text-align:start;writing-mode:lr-tb;text-anchor:start">Eq</flowPara></flowRoot>    <flowRoot
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:40.00099564px;line-height:125%;font-family:'Latin Modern Roman Dunhill';-inkscape-font-specification:'Latin Modern Roman Dunhill, Normal';text-align:start;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:start;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+       id="flowRoot5081">
+      <path
+         d="m 165.36581,54.093541 -1.00003,0 c -1.00002,6.160154 -1.92005,9.080226 -8.80022,9.080226 l -5.32013,0 c -1.88005,0 -1.96005,-0.280007 -1.96005,-1.60004 l 0,-16.440409 3.60009,0 c 3.8801,0 4.32011,1.280032 4.32011,4.680117 l 1.00002,0 0,-10.600264 -1.00002,0 c 0,3.440085 -0.44001,4.680116 -4.32011,4.680116 l -3.60009,0 0,-14.960372 c 0,-1.320033 0.08,-1.60004 1.96005,-1.60004 l 5.16013,0 c 6.12015,0 7.20018,2.200055 7.84019,7.760193 l 1.00003,0 -1.12003,-9.000224 -22.52056,0 0,1.240031 0.96002,0 c 3.08008,0 3.16008,0.440011 3.16008,1.880047 l 0,32.080798 c 0,1.440036 -0.08,1.880047 -3.16008,1.880047 l -0.96002,0 0,1.240031 23.08057,0 1.68005,-10.320257 z"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:40.00099564px;line-height:125%;font-family:'Latin Modern Roman Dunhill';-inkscape-font-specification:'Latin Modern Roman Dunhill, Normal';text-align:start;writing-mode:lr-tb;text-anchor:start"
+         id="path4180" />
+      <path
+         d="m 187.63198,72.173991 0,-1.240031 c -2.68006,0 -3.12007,0 -3.12007,-1.800044 l 0,-22.400558 -0.88002,0 -1.52004,3.640091 c -0.52002,-1.120028 -2.16006,-3.640091 -5.36014,-3.640091 -4.64011,0 -8.84022,3.880097 -8.84022,9.080226 0,5.000124 3.8801,9.040225 8.52022,9.040225 2.80007,0 4.44011,-1.720043 5.32013,-2.880072 l 0,7.160179 c 0,1.800044 -0.44001,1.800044 -3.12008,1.800044 l 0,1.240031 4.48011,-0.120003 4.52011,0.120003 z m -5.76014,-13.200328 c 0,1.280032 -0.72002,2.400059 -1.60004,3.360083 -0.52001,0.560014 -1.80004,1.640041 -3.68009,1.640041 -2.92007,0 -5.36013,-3.560088 -5.36013,-8.160203 0,-4.760118 2.80007,-8.080201 5.76014,-8.080201 3.20008,0 4.88012,3.480087 4.88012,5.600139 l 0,5.640141 z"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:40.00099564px;line-height:125%;font-family:'Latin Modern Roman Dunhill';-inkscape-font-specification:'Latin Modern Roman Dunhill, Normal';text-align:start;writing-mode:lr-tb;text-anchor:start"
+         id="path4182" />
+    </g>
+    <flowRoot
        xml:space="preserve"
        id="flowRoot5093"
        style="font-style:normal;font-weight:normal;font-size:40px;line-height:125%;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"><flowRegion
